@@ -11,6 +11,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class DINOv2Classifier(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.backbone = timm.create_model(
+            'vit_small_patch14_dinov2',
+            num_classes=0,
+            pretrained=False
+        )
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(384),
+            nn.Dropout(0.3),
+            nn.Linear(384, 128),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(128, 3)
+        )
+
+    def forward(self, image_tensor: torch.Tensor) -> torch.Tensor:
+        return self.classifier(self.backbone(image_tensor))
+
+
 class DINOv2Model:
     def __init__(self):
         self.model = None
@@ -26,23 +47,11 @@ class DINOv2Model:
             if not model_path.exists():
                 raise FileNotFoundError(f"DINOv2 model not found at {model_path}")
             
-            # Load the checkpoint
-            checkpoint = torch.load(model_path, map_location=self.device)
-            
-            # Initialize DINOv2 ViT-S/14 model
-            self.model = timm.create_model(
-                'vit_small_patch14_224.dinov2',
-                num_classes=settings.DINOV2_NUM_CLASSES,
-                pretrained=False
-            )
-            
-            # Load state dict
-            if 'model' in checkpoint:
-                self.model.load_state_dict(checkpoint['model'])
-            elif 'state_dict' in checkpoint:
-                self.model.load_state_dict(checkpoint['state_dict'])
-            else:
-                self.model.load_state_dict(checkpoint)
+            checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
+            state_dict = checkpoint['model_state_dict']
+
+            self.model = DINOv2Classifier()
+            self.model.load_state_dict(state_dict, strict=True)
             
             self.model.to(self.device)
             self.model.eval()
@@ -104,9 +113,9 @@ class DINOv2Model:
                 "predicted_diagnosis": diagnosis,
                 "confidence": confidence,
                 "probabilities": {
-                    "normal": probabilities[0],
-                    "osteopenia": probabilities[1],
-                    "osteoporosis": probabilities[2]
+                    "normal": float(probabilities[0]),
+                    "osteopenia": float(probabilities[1]),
+                    "osteoporosis": float(probabilities[2])
                 }
             }
             
