@@ -1,0 +1,35 @@
+{
+    "class_mapping": {
+        "1": "Normal",
+        "2": "Osteopenia",
+        "3": "Osteoporosis"
+    },
+    "clinical_features": [
+        "Age",
+        "Gender",
+        "BMI",
+        "Weight",
+        "Height",
+        "Joint Pain",
+        "Number of Pregnancies",
+        "Class",
+        "Pregnancy_Missing"
+    ],
+    "gender_encoding": {
+        "male": 0,
+        "female": 1
+    },
+    "joint_pain_encoding": {
+        "no": 0,
+        "yes": 1
+    },
+    "male_pregnancy_value": 0,
+    "pregnancy_median": 1.0,
+    "pregnancy_missing_indicator": true,
+    "image_size": 518,
+    "t_score_model": "Random Forest Regressor",
+    "z_score_model": "Gradient Boosting Regressor",
+    "t_score_range_margin": 0.37151470129482217,
+    "z_score_range_margin": 1.223247423942022,
+    "dinov2_checkpoint": "/content/drive/MyDrive/Osteoporosis_DINOv2_Combined/outputs/final_models/dinov2_experiment2_best.pth"
+}

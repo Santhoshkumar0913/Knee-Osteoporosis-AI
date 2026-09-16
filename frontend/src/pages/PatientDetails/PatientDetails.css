@@ -1,0 +1,159 @@
+.patient-details-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.breadcrumb {
+  margin-bottom: 1.5rem;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.breadcrumb a {
+  color: #667eea;
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.patient-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.patient-info h1 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-size: 2rem;
+}
+
+.patient-meta {
+  color: #666;
+  margin: 0;
+}
+
+.patient-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.action-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
+  transition: background-color 0.2s;
+}
+
+.primary-button {
+  background-color: #667eea;
+  color: white;
+}
+
+.primary-button:hover {
+  background-color: #5568d3;
+}
+
+.danger-button {
+  background-color: #dc3545;
+  color: white;
+}
+
+.danger-button:hover {
+  background-color: #c82333;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.error {
+  text-align: center;
+  padding: 2rem;
+  color: #c33;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.analyses-section h2 {
+  color: #333;
+  margin-bottom: 1.5rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.analyses-table {
+  background-color: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.analyses-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.analyses-table th,
+.analyses-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.analyses-table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #333;
+}
+
+.analyses-table tr:hover {
+  background-color: #f8f9fa;
+}
+
+.view-button {
+  background-color: #667eea;
+  color: white;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  margin-right: 0.5rem;
+}
+
+.view-button:hover {
+  background-color: #5568d3;
+}
+
+.delete-button {
+  background-color: #dc3545;
+  color: white;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.delete-button:hover {
+  background-color: #c82333;
+}

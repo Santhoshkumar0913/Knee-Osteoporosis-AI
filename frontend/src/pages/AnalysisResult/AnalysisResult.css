@@ -1,0 +1,237 @@
+.analysis-result-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.breadcrumb {
+  margin-bottom: 1.5rem;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.breadcrumb a {
+  color: #667eea;
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.analysis-result-container h1 {
+  color: #333;
+  margin-bottom: 2rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.error {
+  text-align: center;
+  padding: 2rem;
+  color: #c33;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c33;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.result-card {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.result-card h2 {
+  color: #333;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 0.5rem;
+}
+
+.classification-result {
+  margin-bottom: 2rem;
+}
+
+.predicted-class,
+.confidence {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+}
+
+.predicted-class .label,
+.confidence .label {
+  font-weight: 600;
+  color: #666;
+}
+
+.predicted-class .value,
+.confidence .value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.probabilities h3 {
+  color: #333;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.probability-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.probability-bar .label {
+  width: 120px;
+  font-weight: 600;
+  color: #666;
+}
+
+.bar-container {
+  flex: 1;
+  height: 24px;
+  background-color: #e0e0e0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.bar {
+  height: 100%;
+  background-color: #667eea;
+  transition: width 0.3s ease;
+}
+
+.bar.highlighted {
+  background-color: #28a745;
+}
+
+.probability-bar .value {
+  width: 80px;
+  text-align: right;
+  font-weight: 600;
+  color: #333;
+}
+
+.score-result {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+}
+
+.score-result h3 {
+  color: #666;
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.score-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #333;
+  margin: 0.5rem 0;
+}
+
+.score-range {
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.disclaimer {
+  padding: 1rem;
+  background-color: #fff3cd;
+  border-left: 4px solid #ffc107;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #856404;
+}
+
+.disclaimer p {
+  margin: 0;
+}
+
+.patient-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.detail-row .label {
+  font-weight: 600;
+  color: #666;
+}
+
+.detail-row .value {
+  color: #333;
+}
+
+.result-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.action-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
+  transition: background-color 0.2s;
+}
+
+.primary-button {
+  background-color: #667eea;
+  color: white;
+}
+
+.primary-button:hover {
+  background-color: #5568d3;
+}
+
+.secondary-button {
+  background-color: #6c757d;
+  color: white;
+}
+
+.secondary-button:hover {
+  background-color: #5a6268;
+}
