@@ -15,6 +15,7 @@ class OpenRouterService:
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
         self.model = settings.LLM_MODEL
         self.timeout = 30.0
+        self.max_retries = 2
     
     def generate_clinical_support(
         self,
@@ -29,119 +30,77 @@ class OpenRouterService:
             logger.warning("OpenRouter API key not configured, returning mock response")
             return self._generate_mock_response(retrieved_chunks, analysis_context)
         
-        try:
-            # Build retrieved evidence context
-            evidence_context = "\n\n".join([
-                f"Source: {chunk.get('organization', 'Unknown')} ({chunk.get('publication_year', 'Unknown')})\n{chunk.get('chunk_text', '')}"
-                for chunk in retrieved_chunks
-            ])
-            
-            # Build the prompt
-            prompt = self._build_clinical_support_prompt(
-                query=query,
-                evidence_context=evidence_context,
-                analysis_context=analysis_context
-            )
-            
-            # Make API request
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "Knee Osteoporosis AI"
-            }
-            
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a helpful medical assistant providing evidence-based information about osteoporosis. Always base your responses on the provided evidence. Do not invent facts, citations, or medical advice. Do not prescribe medications or dosages. Always recommend consulting a doctor for medical decisions."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "temperature": 0.7,
-                "max_tokens": 1000
-            }
-            
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(self.base_url, headers=headers, json=payload)
-                response.raise_for_status()
+        # Retry logic for null/empty responses
+        for attempt in range(self.max_retries):
+            try:
+                # Build retrieved evidence context
+                evidence_context = "\n\n".join([
+                    f"Source: {chunk.get('organization', 'Unknown')} ({chunk.get('publication_year', 'Unknown')})\n{chunk.get('chunk_text', '')}"
+                    for chunk in retrieved_chunks
+                ])
                 
-                result = response.json()
+                # Build the prompt
+                prompt = self._build_clinical_support_prompt(
+                    query=query,
+                    evidence_context=evidence_context,
+                    analysis_context=analysis_context
+                )
                 
-                # Extract the generated response
-                if "choices" in result and len(result["choices"]) > 0:
-                    generated_text = result["choices"][0]["message"]["content"]
-                    return self._parse_clinical_support_response(generated_text, retrieved_chunks)
-                else:
-                    raise ValueError("Invalid response format from OpenRouter")
+                # Make API request
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "Knee Osteoporosis AI"
+                }
+                
+                payload = {
+                    "model": self.model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": "You are a helpful medical assistant providing evidence-based information about osteoporosis. Always base your responses on the provided evidence. Do not invent facts, citations, or medical advice. Do not prescribe medications or dosages. Always recommend consulting a doctor for medical decisions."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 1000
+                }
+                
+                with httpx.Client(timeout=self.timeout) as client:
+                    response = client.post(self.base_url, headers=headers, json=payload)
+                    response.raise_for_status()
                     
-        except httpx.HTTPStatusError as e:
-            logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
-            raise
-        except Exception as e:
-            logger.error(f"Failed to generate clinical support: {str(e)}")
-            raise
-        
-        try:
-            # Build retrieved evidence context
-            evidence_context = "\n\n".join([
-                f"Source: {chunk.get('organization', 'Unknown')} ({chunk.get('publication_year', 'Unknown')})\n{chunk.get('chunk_text', '')}"
-                for chunk in retrieved_chunks
-            ])
-            
-            # Build the prompt
-            prompt = self._build_clinical_support_prompt(
-                query=query,
-                evidence_context=evidence_context,
-                analysis_context=analysis_context
-            )
-            
-            # Make API request
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "Knee Osteoporosis AI"
-            }
-            
-            payload = {
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are a helpful medical assistant providing evidence-based information about osteoporosis. Always base your responses on the provided evidence. Do not invent facts, citations, or medical advice. Do not prescribe medications or dosages. Always recommend consulting a doctor for medical decisions."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "temperature": 0.7,
-                "max_tokens": 1000
-            }
-            
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(self.base_url, headers=headers, json=payload)
-                response.raise_for_status()
-                
-                result = response.json()
-                
-                # Extract the generated response
-                if "choices" in result and len(result["choices"]) > 0:
-                    generated_text = result["choices"][0]["message"]["content"]
-                    return self._parse_clinical_support_response(generated_text, retrieved_chunks)
-                else:
-                    raise ValueError("Invalid response format from OpenRouter")
+                    result = response.json()
                     
-        except httpx.HTTPStatusError as e:
-            logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
-            raise
-        except Exception as e:
-            logger.error(f"Failed to generate clinical support: {str(e)}")
-            raise
+                    # Extract the generated response with null/empty check
+                    if "choices" in result and len(result["choices"]) > 0:
+                        message = result["choices"][0].get("message", {})
+                        generated_text = message.get("content")
+                        
+                        if not generated_text or not generated_text.strip():
+                            logger.error(f"OpenRouter returned null or empty content (attempt {attempt + 1}/{self.max_retries})")
+                            if attempt < self.max_retries - 1:
+                                continue  # Retry
+                            else:
+                                raise ValueError("OpenRouter returned null or empty content after retries")
+                        
+                        return self._parse_clinical_support_response(generated_text, retrieved_chunks)
+                    else:
+                        raise ValueError("Invalid response format from OpenRouter")
+                        
+            except httpx.HTTPStatusError as e:
+                logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
+                raise
+            except ValueError as e:
+                if "null or empty content" in str(e) and attempt < self.max_retries - 1:
+                    continue  # Retry on null/empty content
+                raise
+            except Exception as e:
+                logger.error(f"Failed to generate clinical support: {str(e)}")
+                raise
     
     def _build_clinical_support_prompt(
         self,
