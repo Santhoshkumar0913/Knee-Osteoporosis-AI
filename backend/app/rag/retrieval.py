@@ -6,8 +6,6 @@ import logging
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.db.database import SessionLocal
-from app.db.rag_models import RAGChunk
 from app.core.config import settings
 from app.rag.embeddings import get_embedding_service
 
@@ -36,7 +34,9 @@ class RetrievalService:
             # Use pgvector cosine similarity search directly on database
             # This queries the actual PostgreSQL pgvector column with existing embeddings
             # No in-memory vector store is created or used
-            sql = f"""
+            # Note: Parameter binding for vector types with PostgreSQL requires f-string interpolation
+            # due to PostgreSQL SQL dialect limitations with type cast syntax
+            sql = text(f"""
                 SELECT 
                     rc.id,
                     rc.chunk_text,
@@ -49,10 +49,10 @@ class RetrievalService:
                 FROM rag_chunks rc
                 JOIN rag_documents rd ON rc.document_id = rd.id
                 ORDER BY rc.embedding <=> '{embedding_str}'::vector
-                LIMIT {self.top_k}
-            """
+                LIMIT :top_k
+            """)
             
-            result = db.execute(text(sql))
+            result = db.execute(sql, {"top_k": self.top_k})
             rows = result.fetchall()
             
             results = []
