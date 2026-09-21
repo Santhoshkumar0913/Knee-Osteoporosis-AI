@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from pgvector.sqlalchemy import Vector
 from app.db.database import Base
 
 
@@ -28,7 +29,7 @@ class RAGChunk(Base):
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("rag_documents.id", ondelete="CASCADE"), nullable=False, index=True)
     chunk_text = Column(Text, nullable=False)
-    embedding = Column(String, nullable=False)  # Stored as vector(768) in PostgreSQL
+    embedding = Column(Vector(768), nullable=False)  # PostgreSQL vector(768) column
     chunk_index = Column(Integer, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
