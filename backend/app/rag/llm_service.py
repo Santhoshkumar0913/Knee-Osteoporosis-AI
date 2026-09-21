@@ -66,7 +66,7 @@ class OpenRouterService:
                         }
                     ],
                     "temperature": 0.7,
-                    "max_tokens": 1000
+                    "max_tokens": 3000  # Increased to avoid length truncation
                 }
                 
                 with httpx.Client(timeout=self.timeout) as client:
@@ -80,12 +80,18 @@ class OpenRouterService:
                         message = result["choices"][0].get("message", {})
                         generated_text = message.get("content")
                         
+                        # Some models put content in 'reasoning' field instead of 'content'
                         if not generated_text or not generated_text.strip():
-                            logger.error(f"OpenRouter returned null or empty content (attempt {attempt + 1}/{self.max_retries})")
-                            if attempt < self.max_retries - 1:
-                                continue  # Retry
+                            reasoning = message.get("reasoning")
+                            if reasoning and reasoning.strip():
+                                logger.info("Using 'reasoning' field as content (content field was null)")
+                                generated_text = reasoning
                             else:
-                                raise ValueError("OpenRouter returned null or empty content after retries")
+                                logger.error(f"OpenRouter returned null or empty content (attempt {attempt + 1}/{self.max_retries})")
+                                if attempt < self.max_retries - 1:
+                                    continue  # Retry
+                                else:
+                                    raise ValueError("OpenRouter returned null or empty content after retries")
                         
                         return self._parse_clinical_support_response(generated_text, retrieved_chunks)
                     else:
