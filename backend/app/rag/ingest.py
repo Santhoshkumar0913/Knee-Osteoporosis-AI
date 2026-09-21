@@ -21,25 +21,25 @@ DOCUMENT_METADATA = {
         "title": "WHO Fragility Fractures",
         "organization": "WHO",
         "publication_year": 2022,
-        "source_url": "https://www.who.int/publications/i/item/9789241503229"
+        "source_url": "https://www.who.int/tools/fragility-fracture-tool"
     },
     "ISBMR_Osteoporosis_Adults.pdf": {
-        "title": "ISBMR Guidelines for Osteoporosis in Adults",
+        "title": "ISBMR Position Statement on Osteoporosis in Adults",
         "organization": "ISBMR",
         "publication_year": 2020,
-        "source_url": "https://www.isbmr.org/guidelines/"
+        "source_url": "https://www.isbmr.org/position-statements/"
     },
     "IMS_Postmenopausal_Osteoporosis.pdf": {
-        "title": "IMS Postmenopausal Osteoporosis Guidelines",
+        "title": "IMS Postmenopausal Osteoporosis Management",
         "organization": "IMS",
         "publication_year": 2021,
-        "source_url": "https://www.imshealth.com/"
+        "source_url": "https://www.imshealth.com/resources"
     },
     "BHOF_Clinicians_Guide.pdf": {
-        "title": "BHOF Clinicians Guide to Osteoporosis",
+        "title": "Clinician's Guide to Prevention and Treatment of Osteoporosis",
         "organization": "BHOF",
         "publication_year": 2023,
-        "source_url": "https://www.bonehealthandosteoporosis.org/"
+        "source_url": "https://www.bonehealthandosteoporosis.org/guides/"
     }
 }
 
