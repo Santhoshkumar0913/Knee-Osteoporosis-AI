@@ -69,6 +69,9 @@ dist-ssr/
 storage/uploads/
 !storage/uploads/.gitkeep
 
+# RAG source documents - keep local
+rag_documents/
+
 # Logs
 *.log
 logs/
@@ -81,3 +84,5 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+
+
