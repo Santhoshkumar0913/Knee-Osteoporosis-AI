@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Optional
 from pypdf import PdfReader
+from sqlalchemy import text as sql_text
 from app.core.config import settings
 from app.db.database import SessionLocal
 from app.db.rag_models import RAGDocument, RAGChunk
@@ -95,14 +96,16 @@ def ingest_document(
     existing_doc = db.query(RAGDocument).filter(RAGDocument.filename == filename).first()
     if existing_doc:
         if existing_doc.checksum == checksum:
-            logger.info(f"Document {filename} already ingested with same checksum, skipping")
-            return {"skipped": 1, "chunks": 0}
-        else:
-            logger.info(f"Document {filename} exists with different checksum, reingesting")
-            # Delete old chunks
-            db.query(RAGChunk).filter(RAGChunk.document_id == existing_doc.id).delete()
-            db.delete(existing_doc)
-            db.commit()
+            # Check if chunks exist with proper vector type
+            chunk_count = db.query(RAGChunk).filter(RAGChunk.document_id == existing_doc.id).count()
+            if chunk_count > 0:
+                logger.info(f"Document {filename} already ingested with same checksum and {chunk_count} chunks, skipping")
+                return {"skipped": 1, "chunks": chunk_count}
+        # Reingest if checksum differs or no chunks
+        logger.info(f"Document {filename} exists, reingesting")
+        db.query(RAGChunk).filter(RAGChunk.document_id == existing_doc.id).delete()
+        db.delete(existing_doc)
+        db.commit()
     
     # Get document metadata
     metadata = DOCUMENT_METADATA.get(filename, {})
@@ -144,16 +147,23 @@ def ingest_document(
     logger.info(f"Generating embeddings for {len(chunks)} chunks from {filename}")
     embedding_service = get_embedding_service()
     
-    for i, chunk in enumerate(chunks):
+    for idx, chunk in enumerate(chunks):
         embedding = embedding_service.embed_text(chunk)
+        # Convert embedding array to PostgreSQL vector format: "[x1,x2,...,x768]"
+        embedding_str = "[" + ",".join(map(str, embedding.tolist())) + "]"
         
-        chunk_record = RAGChunk(
-            document_id=doc_record.id,
-            chunk_text=chunk,
-            embedding=embedding.tobytes(),  # Store as bytes
-            chunk_index=i
-        )
-        db.add(chunk_record)
+        # Use raw SQL to insert vector type correctly
+        insert_sql = sql_text("""
+            INSERT INTO rag_chunks (document_id, chunk_text, embedding, chunk_index)
+            VALUES (:document_id, :chunk_text, CAST(:embedding AS vector), :chunk_index)
+        """)
+        
+        db.execute(insert_sql, {
+            "document_id": doc_record.id,
+            "chunk_text": chunk,
+            "embedding": embedding_str,
+            "chunk_index": idx
+        })
     
     db.commit()
     logger.info(f"Successfully ingested {filename}: {len(chunks)} chunks")
@@ -193,6 +203,9 @@ def ingest_all_documents():
 
 if __name__ == "__main__":
     import sys
+    import io
+    # Set UTF-8 encoding for stdout
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     logging.basicConfig(level=logging.INFO)
     
     print("Starting RAG document ingestion...")
