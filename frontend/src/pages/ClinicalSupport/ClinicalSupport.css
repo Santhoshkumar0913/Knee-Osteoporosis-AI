@@ -23,6 +23,34 @@ h1 {
   margin-bottom: 1rem;
 }
 
+.error-section {
+  background-color: #fee;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.retry-button {
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.retry-button:hover:not(:disabled) {
+  background-color: #c0392b;
+}
+
+.retry-button:disabled {
+  background-color: #bdc3c7;
+  cursor: not-allowed;
+}
+
 .analysis-summary {
   background-color: #f8f9fa;
   padding: 1.5rem;
