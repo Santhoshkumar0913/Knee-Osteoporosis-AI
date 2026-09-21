@@ -32,7 +32,8 @@ class RetrievalService:
             embedding_str = "[" + ",".join(map(str, embedding_array)) + "]"
             
             # Use pgvector's cosine similarity search (cosine distance <=>)
-            sql = text("""
+            # Build the SQL with literal embedding value
+            sql = f"""
                 SELECT 
                     rc.id,
                     rc.chunk_text,
@@ -41,17 +42,14 @@ class RetrievalService:
                     rd.title,
                     rd.organization,
                     rd.publication_year,
-                    1 - (rc.embedding <=> :embedding::vector) as similarity
+                    1 - (rc.embedding <=> '{embedding_str}'::vector) as similarity
                 FROM rag_chunks rc
                 JOIN rag_documents rd ON rc.document_id = rd.id
-                ORDER BY rc.embedding <=> :embedding::vector
-                LIMIT :top_k
-            """)
+                ORDER BY rc.embedding <=> '{embedding_str}'::vector
+                LIMIT {self.top_k}
+            """
             
-            result = db.execute(sql, {
-                "embedding": embedding_str,
-                "top_k": self.top_k
-            })
+            result = db.execute(text(sql))
             
             rows = result.fetchall()
             
@@ -72,22 +70,7 @@ class RetrievalService:
             
         except Exception as e:
             logger.error(f"Failed to retrieve chunks with pgvector: {str(e)}")
-            # Fallback to simple text search if vector search fails
-            logger.warning("Falling back to simple text search")
-            chunks = db.query(RAGChunk).order_by(RAGChunk.id).limit(self.top_k).all()
-            
-            results = []
-            for chunk in chunks:
-                results.append({
-                    "chunk_text": chunk.chunk_text,
-                    "document_id": chunk.document_id,
-                    "chunk_index": chunk.chunk_index,
-                    "organization": chunk.document.organization if chunk.document else "Unknown",
-                    "publication_year": chunk.document.publication_year if chunk.document else None,
-                    "title": chunk.document.title if chunk.document else "Unknown"
-                })
-            
-            return results
+            raise
 
 
 # Global retrieval service instance
