@@ -3,10 +3,20 @@ OpenRouter LLM service for clinical support generation
 """
 import logging
 import httpx
+import json
 from typing import Dict, Any, Optional
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+GROUNDING_NOTE = "This response is based on retrieved medical evidence and the analysis results."
+DISCLAIMER = "AI-assisted guidance for informational purposes. This does not replace a doctor's diagnosis or treatment decision. Discuss medical decisions with your doctor."
+SECTION_FIELDS = (
+    "what_you_can_do_now",
+    "talk_to_your_doctor_about",
+    "testing_and_follow_up",
+    "treatment_information",
+)
 
 
 class OpenRouterService:
@@ -93,7 +103,28 @@ class OpenRouterService:
                                 else:
                                     raise ValueError("OpenRouter returned null or empty content after retries")
                         
-                        return self._parse_clinical_support_response(generated_text, retrieved_chunks)
+                        try:
+                            return self._parse_clinical_support_response(generated_text, retrieved_chunks)
+                        except ValueError as e:
+                            # Fallback: put raw text in explanation if parsing fails
+                            logger.warning(f"Structured parsing failed, using raw text: {e}")
+                            # Extract sources even for fallback
+                            sources = []
+                            seen_sources = set()
+                            for chunk in retrieved_chunks:
+                                org = chunk.get('organization', 'Unknown')
+                                year = chunk.get('publication_year', 'Unknown')
+                                source_key = f"{org} — {year}"
+                                if source_key not in seen_sources:
+                                    sources.append({"organization": org, "year": year})
+                                    seen_sources.add(source_key)
+                            return {
+                                "explanation": generated_text,
+                                **{field: [] for field in SECTION_FIELDS},
+                                "sources": sources,
+                                "grounding_note": GROUNDING_NOTE,
+                                "disclaimer": DISCLAIMER,
+                            }
                     else:
                         raise ValueError("Invalid response format from OpenRouter")
                         
@@ -115,8 +146,7 @@ class OpenRouterService:
         analysis_context: Dict[str, Any]
     ) -> str:
         """Build the prompt for clinical support generation"""
-        prompt = f"""
-Based on the following patient case and retrieved medical evidence, provide evidence-based clinical support:
+        prompt = f"""Based on the following patient case and retrieved medical evidence, provide evidence-based clinical support.
 
 PATIENT CASE:
 {query}
@@ -135,13 +165,16 @@ INSTRUCTIONS:
 8. Always recommend consulting a doctor for medical decisions
 9. If evidence is insufficient, provide general educational information but clearly identify it as such
 
-Provide your response in a structured format that can be easily parsed into JSON sections:
-- explanation
-- what_you_can_do_now
-- talk_to_your_doctor_about
-- testing_and_follow_up
-- treatment_information (only if supported by evidence)
-"""
+Provide your response in this exact JSON format:
+{{
+  "explanation": "your explanation here",
+  "what_you_can_do_now": ["item 1", "item 2"],
+  "talk_to_your_doctor_about": ["item 1", "item 2"],
+  "testing_and_follow_up": ["item 1", "item 2"],
+  "treatment_information": ["item 1", "item 2"]
+}}
+
+Return ONLY valid JSON. Do not include any text outside the JSON structure."""
         return prompt
     
     def _parse_clinical_support_response(
@@ -150,30 +183,70 @@ Provide your response in a structured format that can be easily parsed into JSON
         retrieved_chunks: list
     ) -> Dict[str, Any]:
         """Parse the generated response into structured format"""
-        # For MVP, we'll return the raw text and let the frontend handle display
-        # In production, this would parse the structured response
-        
-        # Extract sources from retrieved chunks
+        parsed = self._extract_json_object(generated_text)
+        raw_text = generated_text.strip() if isinstance(generated_text, str) else ""
+
+        if parsed is None:
+            logger.warning("No valid JSON object found in LLM response; returning safe partial response")
+            parsed = {}
+
+        explanation = parsed.get("explanation")
+        if not isinstance(explanation, str) or not explanation.strip():
+            explanation = raw_text or "No structured explanation was provided."
+
+        response = {
+            "explanation": explanation.strip(),
+            **{
+                field: self._normalize_string_list(parsed.get(field))
+                for field in SECTION_FIELDS
+            },
+            "sources": self._build_sources(retrieved_chunks),
+            "grounding_note": GROUNDING_NOTE,
+            "disclaimer": DISCLAIMER,
+        }
+
+        if parsed:
+            logger.info("Successfully parsed structured LLM response")
+        return response
+
+    @staticmethod
+    def _extract_json_object(value: Any) -> Optional[Dict[str, Any]]:
+        """Return the first decodable JSON object in an LLM response."""
+        if not isinstance(value, str) or not value.strip():
+            return None
+
+        decoder = json.JSONDecoder()
+        for index, character in enumerate(value):
+            if character != "{":
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(value[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        return None
+
+    @staticmethod
+    def _normalize_string_list(value: Any) -> list[str]:
+        """Keep only non-empty strings so malformed model fields cannot leak through."""
+        if not isinstance(value, list):
+            return []
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+
+    @staticmethod
+    def _build_sources(retrieved_chunks: list) -> list[Dict[str, Any]]:
+        """Build display sources exclusively from retrieved evidence metadata."""
         sources = []
         seen_sources = set()
-        for chunk in retrieved_chunks:
-            org = chunk.get('organization', 'Unknown')
-            year = chunk.get('publication_year', 'Unknown')
+        for chunk in retrieved_chunks or []:
+            org = chunk.get("organization") or "Unknown"
+            year = chunk.get("publication_year") or "Unknown"
             source_key = f"{org} — {year}"
             if source_key not in seen_sources:
-                sources.append({"organization": org, "year": year})
+                sources.append({"organization": str(org), "year": year})
                 seen_sources.add(source_key)
-        
-        return {
-            "explanation": generated_text,
-            "what_you_can_do_now": [],
-            "talk_to_your_doctor_about": [],
-            "testing_and_follow_up": [],
-            "treatment_information": [],
-            "sources": sources,
-            "grounding_note": "This response is based on retrieved medical evidence and the analysis results.",
-            "disclaimer": "AI-assisted guidance for informational purposes. This does not replace a doctor's diagnosis or treatment decision. Discuss medical decisions with your doctor."
-        }
+        return sources
     
     def _generate_mock_response(
         self,
