@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import timm
 from pathlib import Path
 from PIL import Image
@@ -11,6 +12,47 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class ResizeAndPad:
+    """
+    Custom ResizeAndPad transform matching training notebook:
+    - Aspect-ratio-preserving resize using LANCZOS
+    - Centered zero padding to target size
+    """
+    def __init__(self, size: int, fill: int = 0):
+        self.size = size
+        self.fill = fill
+    
+    def __call__(self, image: Image.Image) -> Image.Image:
+        # Convert to RGB if necessary
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        # Get original dimensions
+        original_width, original_height = image.size
+        
+        # Calculate scaling factor to fit within target size while preserving aspect ratio
+        scale = min(self.size / original_width, self.size / original_height)
+        
+        # Calculate new dimensions
+        new_width = int(original_width * scale)
+        new_height = int(original_height * scale)
+        
+        # Resize using LANCZOS interpolation
+        image = image.resize((new_width, new_height), Image.LANCZOS)
+        
+        # Create new image with target size and fill value (black)
+        padded_image = Image.new('RGB', (self.size, self.size), (self.fill, self.fill, self.fill))
+        
+        # Calculate centered position
+        paste_x = (self.size - new_width) // 2
+        paste_y = (self.size - new_height) // 2
+        
+        # Paste resized image onto padded background
+        padded_image.paste(image, (paste_x, paste_y))
+        
+        return padded_image
+
+
 class DINOv2Classifier(nn.Module):
     def __init__(self):
         super().__init__()
@@ -19,12 +61,13 @@ class DINOv2Classifier(nn.Module):
             num_classes=0,
             pretrained=False
         )
+        # Correct architecture matching training: LayerNorm(384) -> Dropout(0.40) -> Linear(384, 128) -> GELU -> Dropout(0.30) -> Linear(128, 3)
         self.classifier = nn.Sequential(
             nn.LayerNorm(384),
-            nn.Dropout(0.3),
+            nn.Dropout(0.40),
             nn.Linear(384, 128),
-            nn.ReLU(),
-            nn.Dropout(0.3),
+            nn.GELU(),
+            nn.Dropout(0.30),
             nn.Linear(128, 3)
         )
 
@@ -65,16 +108,13 @@ class DINOv2Model:
     def preprocess_image(self, image: Image.Image) -> torch.Tensor:
         """
         Preprocess image for DINOv2 inference
-        Expected input size: 518x518
+        Exact training pipeline: RGB → ResizeAndPad(518, fill=0) → LANCZOS aspect-ratio-preserving resize → centered zero padding → ToTensor → ImageNet normalization
         """
-        # Resize to expected input size
-        image = image.resize((settings.DINOV2_INPUT_SIZE, settings.DINOV2_INPUT_SIZE), Image.LANCZOS)
-        
-        # Convert to tensor and normalize
-        # DINOv2 uses ImageNet normalization
         import torchvision.transforms as transforms
         
+        # Apply exact training preprocessing
         transform = transforms.Compose([
+            ResizeAndPad(size=settings.DINOV2_INPUT_SIZE, fill=0),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],

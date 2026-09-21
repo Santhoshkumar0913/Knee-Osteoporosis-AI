@@ -21,6 +21,13 @@ export interface Analysis {
   joint_pain: string;
   pregnancies: number;
   
+  // Phase 2 additional clinical fields
+  menopausal_status?: string;
+  smoking?: string;
+  alcohol?: string;
+  previous_fracture?: string;
+  long_term_steroid_use?: string;
+  
   // DINOv2 results
   predicted_class: number;
   predicted_diagnosis: string;
@@ -65,5 +72,36 @@ export interface AnalysisCreate {
   weight: number;
   joint_pain: string;
   pregnancies: number;
+  // Phase 2 additional clinical fields
+  menopausal_status?: string;
+  smoking?: string;
+  alcohol?: string;
+  previous_fracture?: string;
+  long_term_steroid_use?: string;
   image: File;
+}
+
+export interface ClinicalSupportResponse {
+  analysis_id: number;
+  prediction_summary: {
+    class: string;
+    confidence: number;
+    t_score: number;
+    t_score_lower: number;
+    t_score_upper: number;
+    z_score: number;
+    z_score_lower: number;
+    z_score_upper: number;
+  };
+  explanation: string;
+  what_you_can_do_now: string[];
+  talk_to_your_doctor_about: string[];
+  testing_and_follow_up: string[];
+  treatment_information: string[];
+  sources: {
+    organization: string;
+    year: number;
+  }[];
+  grounding_note: string;
+  disclaimer: string;
 }

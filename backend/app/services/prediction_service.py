@@ -39,7 +39,13 @@ class PredictionService:
         height: float,
         weight: float,
         joint_pain: str,
-        pregnancies: int
+        pregnancies: int,
+        # Phase 2 additional clinical fields (not used in ML, but returned for storage)
+        menopausal_status: str = None,
+        smoking: str = None,
+        alcohol: str = None,
+        previous_fracture: str = None,
+        long_term_steroid_use: str = None
     ) -> Dict:
         """
         Run complete analysis pipeline:
@@ -53,7 +59,7 @@ class PredictionService:
         """
         try:
             # Step 1: Validate inputs
-            self._validate_inputs(age, gender, height, weight, joint_pain, pregnancies)
+            self._validate_inputs(age, gender, height, weight, joint_pain, pregnancies, menopausal_status, smoking, alcohol, previous_fracture, long_term_steroid_use)
             
             # Step 2: Load image
             image = Image.open(io.BytesIO(image_data))
@@ -77,7 +83,12 @@ class PredictionService:
                 bmi=bmi,
                 joint_pain=joint_pain,
                 pregnancies=pregnancies,
-                predicted_class=dinov2_result['predicted_class']
+                predicted_class=dinov2_result['predicted_class'],
+                menopausal_status=menopausal_status,
+                smoking=smoking,
+                alcohol=alcohol,
+                previous_fracture=previous_fracture,
+                long_term_steroid_use=long_term_steroid_use
             )
             
             # Step 6: Run clinical model predictions
@@ -93,6 +104,12 @@ class PredictionService:
                 "bmi": bmi,
                 "joint_pain": joint_pain,
                 "pregnancies": pregnancies,
+                # Phase 2 additional clinical fields
+                "menopausal_status": menopausal_status,
+                "smoking": smoking,
+                "alcohol": alcohol,
+                "previous_fracture": previous_fracture,
+                "long_term_steroid_use": long_term_steroid_use,
                 
                 # DINOv2 results
                 "predicted_class": dinov2_result['predicted_class'],
@@ -128,7 +145,12 @@ class PredictionService:
         height: float,
         weight: float,
         joint_pain: str,
-        pregnancies: int
+        pregnancies: int,
+        menopausal_status: str = None,
+        smoking: str = None,
+        alcohol: str = None,
+        previous_fracture: str = None,
+        long_term_steroid_use: str = None
     ):
         """Validate input parameters"""
         if age <= 0 or age > 150:
@@ -155,6 +177,25 @@ class PredictionService:
         
         if gender.lower() == "female" and pregnancies < 0:
             raise ValueError("Pregnancies is required for female patients")
+        
+        # Phase 2 field validation (all optional, but if provided must be valid)
+        valid_yes_no = ["yes", "no", "yes", "no", None]
+        if smoking and smoking.lower() not in ["yes", "no"]:
+            raise ValueError("Smoking must be 'yes' or 'no'")
+        
+        if alcohol and alcohol.lower() not in ["yes", "no"]:
+            raise ValueError("Alcohol must be 'yes' or 'no'")
+        
+        if previous_fracture and previous_fracture.lower() not in ["yes", "no"]:
+            raise ValueError("Previous fracture must be 'yes' or 'no'")
+        
+        if long_term_steroid_use and long_term_steroid_use.lower() not in ["yes", "no"]:
+            raise ValueError("Long-term steroid use must be 'yes' or 'no'")
+        
+        # Menopausal status validation (controlled selection)
+        valid_menopausal = ["premenopausal", "perimenopausal", "postmenopausal", None]
+        if menopausal_status and menopausal_status.lower() not in ["premenopausal", "perimenopausal", "postmenopausal"]:
+            raise ValueError("Menopausal status must be one of: premenopausal, perimenopausal, postmenopausal")
 
 
 # Global service instance

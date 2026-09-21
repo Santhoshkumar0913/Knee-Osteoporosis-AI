@@ -4,6 +4,7 @@ import Patients from './pages/Patients/Patients';
 import PatientDetails from './pages/PatientDetails/PatientDetails';
 import NewAnalysis from './pages/NewAnalysis/NewAnalysis';
 import AnalysisResult from './pages/AnalysisResult/AnalysisResult';
+import ClinicalSupport from './pages/ClinicalSupport/ClinicalSupport';
 import './App.css';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
           <Route path="/patients/:patientId" element={<PatientDetails />} />
           <Route path="/patients/:patientId/analysis/new" element={<NewAnalysis />} />
           <Route path="/analyses/:analysisId" element={<AnalysisResult />} />
+          <Route path="/analyses/:analysisId/clinical-support" element={<ClinicalSupport />} />
         </Routes>
       </div>
     </Router>

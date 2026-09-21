@@ -37,6 +37,18 @@ class Settings(BaseSettings):
     API_HOST: str = "localhost"
     API_PORT: int = 8000
     
+    # RAG Configuration
+    RAG_DOCUMENTS_PATH: str = str(PROJECT_ROOT / "rag_documents")
+    EMBEDDING_MODEL: str = "BAAI/bge-base-en-v1.5"
+    RAG_TOP_K: int = 5
+    CHUNK_SIZE: int = 512
+    CHUNK_OVERLAP: int = 50
+    
+    # LLM Configuration
+    LLM_PROVIDER: str = "openrouter"
+    LLM_MODEL: str = "openrouter/free"
+    OPENROUTER_API_KEY: str = ""
+    
     class Config:
         env_file = "../.env"
         case_sensitive = True
@@ -46,3 +58,4 @@ class Settings(BaseSettings):
 settings = Settings()
 settings.MODEL_PATH = str((PROJECT_ROOT / settings.MODEL_PATH).resolve()) if not Path(settings.MODEL_PATH).is_absolute() else settings.MODEL_PATH
 settings.STORAGE_PATH = str((PROJECT_ROOT / settings.STORAGE_PATH).resolve()) if not Path(settings.STORAGE_PATH).is_absolute() else settings.STORAGE_PATH
+settings.RAG_DOCUMENTS_PATH = str((PROJECT_ROOT / settings.RAG_DOCUMENTS_PATH).resolve()) if not Path(settings.RAG_DOCUMENTS_PATH).is_absolute() else settings.RAG_DOCUMENTS_PATH
