@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getAnalysis, getClinicalSupport } from '../../services/api';
-import type { Analysis, ClinicalSupportResponse } from '../../types';
+import { getAnalysis, getClinicalSupport, getPatient } from '../../services/api';
+import type { Analysis, ClinicalSupportResponse, Patient } from '../../types';
 import './ClinicalSupport.css';
 
 const ClinicalSupport = () => {
   const { analysisId } = useParams<{ analysisId: string }>();
   const navigate = useNavigate();
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [patient, setPatient] = useState<Patient | null>(null);
   const [clinicalSupport, setClinicalSupport] = useState<ClinicalSupportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -24,6 +25,11 @@ const ClinicalSupport = () => {
       setLoading(true);
       const data = await getAnalysis(parseInt(analysisId!));
       setAnalysis(data);
+      
+      // Load patient data to get patient name
+      const patientData = await getPatient(data.patient_id);
+      setPatient(patientData);
+      
       setError(null);
     } catch (err) {
       setError('Failed to load analysis');
@@ -65,17 +71,38 @@ const ClinicalSupport = () => {
 
       <h1>Clinical Support</h1>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && (
+        <div className="error-section">
+          <div className="error-message">{error}</div>
+          <button
+            className="retry-button"
+            onClick={handleGenerateSupport}
+            disabled={generating}
+          >
+            {generating ? 'Retrying...' : 'Retry'}
+          </button>
+        </div>
+      )}
 
       <div className="analysis-summary">
-        <h2>Analysis Summary</h2>
+        <h2>Patient Information</h2>
         <div className="summary-grid">
+          <div className="summary-item">
+            <span className="label">Patient Name:</span>
+            <span className="value">{patient?.name || 'Unknown'}</span>
+          </div>
           <div className="summary-item">
             <span className="label">Patient ID:</span>
             <span className="value">{analysis.patient_id}</span>
           </div>
+        </div>
+      </div>
+
+      <div className="analysis-summary">
+        <h2>AI Prediction</h2>
+        <div className="summary-grid">
           <div className="summary-item">
-            <span className="label">Diagnosis:</span>
+            <span className="label">Predicted Class:</span>
             <span className="value">{analysis.predicted_diagnosis}</span>
           </div>
           <div className="summary-item">
@@ -83,12 +110,92 @@ const ClinicalSupport = () => {
             <span className="value">{(analysis.confidence * 100).toFixed(1)}%</span>
           </div>
           <div className="summary-item">
+            <span className="label">Normal Probability:</span>
+            <span className="value">{(analysis.normal_probability * 100).toFixed(1)}%</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Osteopenia Probability:</span>
+            <span className="value">{(analysis.osteopenia_probability * 100).toFixed(1)}%</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Osteoporosis Probability:</span>
+            <span className="value">{(analysis.osteoporosis_probability * 100).toFixed(1)}%</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="analysis-summary">
+        <h2>Bone Scores</h2>
+        <div className="summary-grid">
+          <div className="summary-item">
             <span className="label">T-score:</span>
             <span className="value">{analysis.t_score.toFixed(2)}</span>
           </div>
           <div className="summary-item">
+            <span className="label">T-score Range:</span>
+            <span className="value">{analysis.t_score_lower.toFixed(2)} to {analysis.t_score_upper.toFixed(2)}</span>
+          </div>
+          <div className="summary-item">
             <span className="label">Z-score:</span>
             <span className="value">{analysis.z_score.toFixed(2)}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Z-score Range:</span>
+            <span className="value">{analysis.z_score_lower.toFixed(2)} to {analysis.z_score_upper.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="analysis-summary">
+        <h2>Clinical Context</h2>
+        <div className="summary-grid">
+          <div className="summary-item">
+            <span className="label">Age:</span>
+            <span className="value">{analysis.age}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Gender:</span>
+            <span className="value">{analysis.gender}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Height:</span>
+            <span className="value">{analysis.height} cm</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Weight:</span>
+            <span className="value">{analysis.weight} kg</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">BMI:</span>
+            <span className="value">{analysis.bmi.toFixed(1)}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Joint Pain:</span>
+            <span className="value">{analysis.joint_pain}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Number of Pregnancies:</span>
+            <span className="value">{analysis.pregnancies}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Menopausal Status:</span>
+            <span className="value">{analysis.menopausal_status || 'Not specified'}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Smoking:</span>
+            <span className="value">{analysis.smoking || 'Not specified'}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Alcohol:</span>
+            <span className="value">{analysis.alcohol || 'Not specified'}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Previous Fracture:</span>
+            <span className="value">{analysis.previous_fracture || 'Not specified'}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Long-term Steroid Use:</span>
+            <span className="value">{analysis.long_term_steroid_use || 'Not specified'}</span>
           </div>
         </div>
       </div>
@@ -174,7 +281,7 @@ const ClinicalSupport = () => {
           </div>
 
           <div className="disclaimer">
-            <p>{clinicalSupport.disclaimer}</p>
+            <p>AI-assisted guidance for informational purposes. This does not replace a doctor's diagnosis or treatment decision. Discuss medical decisions with your doctor.</p>
           </div>
 
           <div className="support-actions">
