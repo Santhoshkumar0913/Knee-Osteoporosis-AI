@@ -201,3 +201,150 @@
   background-color: #a0aec0;
   cursor: not-allowed;
 }
+
+.patients-container,
+.patient-details-container,
+.new-analysis-container,
+.analysis-result-container,
+.clinical-support-container {
+  max-width: 1280px;
+  padding: 32px 28px 56px;
+}
+
+.patients-header {
+  align-items: flex-end;
+  margin-bottom: 28px;
+  position: relative;
+}
+
+.patients-header h1,
+.patient-info h1,
+.new-analysis-container h1,
+.analysis-result-container h1,
+.clinical-support-container h1 {
+  color: var(--ink);
+  font-size: clamp(1.9rem, 3vw, 2.65rem);
+  letter-spacing: -0.035em;
+}
+
+.patients-header::after {
+  content: 'Patient records and longitudinal screening history';
+  position: absolute;
+  margin: 0 0 -34px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.create-button,
+.submit-button,
+.view-button {
+  background: var(--teal);
+}
+
+.create-button:hover,
+.submit-button:hover,
+.view-button:hover {
+  background: var(--teal-dark);
+}
+
+.patients-table,
+.analyses-table {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.patients-table th,
+.analyses-table th {
+  background: #edf6f4;
+  color: var(--navy);
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.patients-table td,
+.analyses-table td {
+  color: var(--ink);
+  border-color: #e5eeec;
+}
+
+.patients-table tr:hover,
+.analyses-table tr:hover {
+  background: #f4faf8;
+}
+
+.action-button {
+  border-radius: var(--radius-sm);
+  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.action-button:hover {
+  transform: translateY(-1px);
+}
+
+.delete-button,
+.danger-button {
+  background: var(--danger);
+}
+
+.delete-button:hover,
+.danger-button:hover {
+  background: #96383e;
+}
+
+.empty-state {
+  border: 1px dashed #b7d2ce;
+  background: var(--surface-soft);
+  border-radius: var(--radius);
+}
+
+.modal-content {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 24px 60px rgba(11, 41, 54, 0.2);
+}
+
+.form-group input {
+  border-color: var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.form-group input:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(25, 125, 120, 0.12);
+}
+
+@media (max-width: 700px) {
+  .patients-container,
+  .patient-details-container,
+  .new-analysis-container,
+  .analysis-result-container,
+  .clinical-support-container {
+    padding: 22px 16px 40px;
+  }
+
+  .patients-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .patients-header::after {
+    display: none;
+  }
+
+  .create-button {
+    width: 100%;
+  }
+
+  .patients-table,
+  .analyses-table {
+    overflow-x: auto;
+  }
+
+  .patients-table table,
+  .analyses-table table {
+    min-width: 650px;
+  }
+}
