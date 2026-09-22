@@ -46,11 +46,20 @@ class ClinicalModel:
         bmi: float,
         joint_pain: str,
         pregnancies: int,
-        predicted_class: int
+        predicted_class: int,
+        # Phase 2 additional fields (NOT used in ML feature vector)
+        menopausal_status: str = None,
+        smoking: str = None,
+        alcohol: str = None,
+        previous_fracture: str = None,
+        long_term_steroid_use: str = None
     ) -> List[float]:
         """
         Build the clinical feature vector in the exact order expected by the models:
         [Age, Gender, BMI, Weight, Height, Joint Pain, Number of Pregnancies, Class, Pregnancy_Missing]
+        
+        Note: Phase 2 additional clinical fields are NOT included in the ML feature vector
+        as per PRD requirements. They are stored with the analysis for RAG context only.
         """
         # Convert gender to numeric (Male=0, Female=1)
         gender_numeric = 1 if gender.lower() == "female" else 0

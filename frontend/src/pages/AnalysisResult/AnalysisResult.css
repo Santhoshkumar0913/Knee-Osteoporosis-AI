@@ -235,3 +235,12 @@
 .secondary-button:hover {
   background-color: #5a6268;
 }
+
+.clinical-support-button {
+  background-color: #17a2b8;
+  color: white;
+}
+
+.clinical-support-button:hover {
+  background-color: #138496;
+}

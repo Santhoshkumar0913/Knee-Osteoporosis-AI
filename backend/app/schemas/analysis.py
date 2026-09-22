@@ -11,6 +11,12 @@ class AnalysisCreate(BaseModel):
     weight: float
     joint_pain: str
     pregnancies: int
+    # Phase 2 additional clinical fields
+    menopausal_status: Optional[str] = None
+    smoking: Optional[str] = None
+    alcohol: Optional[str] = None
+    previous_fracture: Optional[str] = None
+    long_term_steroid_use: Optional[str] = None
 
 
 class AnalysisResponse(BaseModel):
@@ -27,6 +33,12 @@ class AnalysisResponse(BaseModel):
     bmi: float
     joint_pain: str
     pregnancies: int
+    # Phase 2 additional clinical fields
+    menopausal_status: Optional[str] = None
+    smoking: Optional[str] = None
+    alcohol: Optional[str] = None
+    previous_fracture: Optional[str] = None
+    long_term_steroid_use: Optional[str] = None
     
     # DINOv2 results
     predicted_class: int

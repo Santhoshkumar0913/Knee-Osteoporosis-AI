@@ -19,6 +19,12 @@ const NewAnalysis = () => {
   const [weight, setWeight] = useState('');
   const [jointPain, setJointPain] = useState('');
   const [pregnancies, setPregnancies] = useState('');
+  // Phase 2 additional clinical fields
+  const [menopausalStatus, setMenopausalStatus] = useState('');
+  const [smoking, setSmoking] = useState('');
+  const [alcohol, setAlcohol] = useState('');
+  const [previousFracture, setPreviousFracture] = useState('');
+  const [longTermSteroidUse, setLongTermSteroidUse] = useState('');
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
 
@@ -123,6 +129,12 @@ const NewAnalysis = () => {
         weight: weightNum,
         joint_pain: jointPain,
         pregnancies: pregnanciesNum,
+        // Phase 2 additional clinical fields
+        menopausal_status: menopausalStatus || undefined,
+        smoking: smoking || undefined,
+        alcohol: alcohol || undefined,
+        previous_fracture: previousFracture || undefined,
+        long_term_steroid_use: longTermSteroidUse || undefined,
         image
       };
 
@@ -297,6 +309,72 @@ const NewAnalysis = () => {
                 disabled={gender === 'male'}
                 required={gender === 'female'}
               />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="menopausalStatus">Menopausal Status</label>
+              <select
+                id="menopausalStatus"
+                value={menopausalStatus}
+                onChange={(e) => setMenopausalStatus(e.target.value)}
+              >
+                <option value="">Select option</option>
+                <option value="premenopausal">Premenopausal</option>
+                <option value="perimenopausal">Perimenopausal</option>
+                <option value="postmenopausal">Postmenopausal</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="smoking">Smoking</label>
+              <select
+                id="smoking"
+                value={smoking}
+                onChange={(e) => setSmoking(e.target.value)}
+              >
+                <option value="">Select option</option>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="alcohol">Alcohol</label>
+              <select
+                id="alcohol"
+                value={alcohol}
+                onChange={(e) => setAlcohol(e.target.value)}
+              >
+                <option value="">Select option</option>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="previousFracture">Previous Fracture</label>
+              <select
+                id="previousFracture"
+                value={previousFracture}
+                onChange={(e) => setPreviousFracture(e.target.value)}
+              >
+                <option value="">Select option</option>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="longTermSteroidUse">Long-term Steroid Use</label>
+              <select
+                id="longTermSteroidUse"
+                value={longTermSteroidUse}
+                onChange={(e) => setLongTermSteroidUse(e.target.value)}
+              >
+                <option value="">Select option</option>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
             </div>
           </div>
         </div>

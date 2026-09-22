@@ -1,0 +1,236 @@
+"""
+RAG document ingestion pipeline
+Processes PDF documents, extracts text, chunks with metadata, and stores in PostgreSQL with pgvector
+"""
+import hashlib
+import logging
+from pathlib import Path
+from typing import List, Dict, Optional
+from pypdf import PdfReader
+from app.core.config import settings
+from app.db.database import SessionLocal
+from app.db.rag_models import RAGDocument, RAGChunk
+from app.rag.embeddings import get_embedding_service
+
+logger = logging.getLogger(__name__)
+
+# Document metadata for the four approved PDFs
+DOCUMENT_METADATA = {
+    "WHO_Fragility_Fractures.pdf": {
+        "title": "Fragility fractures",
+        "organization": "WHO",
+        "publication_year": 2024,
+        "source_url": "https://www.who.int/tools/fragility-fracture-tool"
+    },
+    "ISBMR_Osteoporosis_Adults.pdf": {
+        "title": "The Indian Society for Bone and Mineral Research (ISBMR) position statement for the diagnosis and treatment of osteoporosis in adults",
+        "organization": "ISBMR",
+        "publication_year": 2021,
+        "source_url": "https://doi.org/10.1007/s11657-021-00954-1"
+    },
+    "IMS_Postmenopausal_Osteoporosis.pdf": {
+        "title": "Clinical Practice Guidelines on Postmenopausal Osteoporosis: An Executive Summary and Recommendations – Update 2019–2020",
+        "organization": "Indian Menopause Society",
+        "publication_year": 2020,
+        "source_url": "https://doi.org/10.4103/jmh.JMH_143_20"
+    },
+    "BHOF_Clinicians_Guide.pdf": {
+        "title": "The clinician's guide to prevention and treatment of osteoporosis",
+        "organization": "BHOF",
+        "publication_year": 2022,
+        "source_url": "https://doi.org/10.1007/s00198-021-05900-y"
+    }
+}
+
+
+def calculate_checksum(file_path: Path) -> str:
+    """Calculate SHA-256 checksum of a file"""
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
+
+
+def extract_text_from_pdf(pdf_path: Path) -> str:
+    """Extract text from PDF file"""
+    try:
+        reader = PdfReader(pdf_path)
+        full_text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:  # Handle None return
+                full_text += page_text
+        return full_text
+    except Exception as e:
+        logger.error(f"Failed to extract text from {pdf_path}: {str(e)}")
+        raise
+
+
+def chunk_text(text: str, chunk_size: int = 512, overlap: int = 50) -> List[str]:
+    """Split text into overlapping chunks"""
+    chunks = []
+    start = 0
+    text_length = len(text)
+    
+    while start < text_length:
+        end = min(start + chunk_size, text_length)
+        chunk = text[start:end]
+        if chunk.strip():  # Only add non-empty chunks
+            chunks.append(chunk)
+        start = end - overlap if end < text_length else text_length
+    
+    return chunks
+
+
+def ingest_document(
+    pdf_path: Path,
+    db: SessionLocal,
+    chunk_size: int = 512,
+    chunk_overlap: int = 50
+) -> Dict[str, int]:
+    """Ingest a single PDF document atomically"""
+    filename = pdf_path.name
+    checksum = calculate_checksum(pdf_path)
+    
+    try:
+        # Check if document already exists
+        existing_doc = db.query(RAGDocument).filter(RAGDocument.filename == filename).first()
+        if existing_doc:
+            if existing_doc.checksum == checksum:
+                # Check if chunks exist with proper vector type
+                chunk_count = db.query(RAGChunk).filter(RAGChunk.document_id == existing_doc.id).count()
+                if chunk_count > 0:
+                    logger.info(f"Document {filename} already ingested with same checksum and {chunk_count} chunks, skipping")
+                    return {"skipped": 1, "chunks": chunk_count}
+            # Reingest if checksum differs or no chunks
+            logger.info(f"Document {filename} exists, reingesting")
+            db.query(RAGChunk).filter(RAGChunk.document_id == existing_doc.id).delete()
+            db.delete(existing_doc)
+            db.commit()
+        
+        # Get document metadata
+        metadata = DOCUMENT_METADATA.get(filename, {})
+        title = metadata.get("title", filename)
+        organization = metadata.get("organization", "Unknown")
+        publication_year = metadata.get("publication_year", None)
+        source_url = metadata.get("source_url", "")
+        
+        # Extract text
+        logger.info(f"Extracting text from {filename}")
+        full_text = extract_text_from_pdf(pdf_path)
+        
+        if not full_text or not full_text.strip():
+            logger.warning(f"No text extracted from {filename}")
+            return {"error": "no_text", "chunks": 0}
+        
+        # Chunk text
+        logger.info(f"Chunking text from {filename}")
+        chunks = chunk_text(full_text, chunk_size, chunk_overlap)
+        
+        if not chunks:
+            logger.warning(f"No chunks created from {filename}")
+            return {"error": "no_chunks", "chunks": 0}
+        
+        # Create document record
+        doc_record = RAGDocument(
+            filename=filename,
+            checksum=checksum,
+            title=title,
+            organization=organization,
+            publication_year=publication_year,
+            source_url=source_url
+        )
+        db.add(doc_record)
+        db.flush()  # Get the ID without committing
+        
+        # Generate embeddings and store chunks atomically
+        logger.info(f"Generating embeddings for {len(chunks)} chunks from {filename}")
+        embedding_service = get_embedding_service()
+        
+        for idx, chunk in enumerate(chunks):
+            embedding = embedding_service.embed_text(chunk)
+            embedding_list = embedding.tolist()
+            
+            # Use ORM to insert with pgvector Vector type
+            chunk_record = RAGChunk(
+                document_id=doc_record.id,
+                chunk_text=chunk,
+                embedding=embedding_list,
+                chunk_index=idx
+            )
+            db.add(chunk_record)
+        
+        # Commit everything atomically
+        db.commit()
+        logger.info(f"Successfully ingested {filename}: {len(chunks)} chunks")
+        
+        return {"ingested": 1, "chunks": len(chunks)}
+        
+    except Exception as e:
+        # Roll back on any failure
+        db.rollback()
+        logger.error(f"Failed to ingest {filename}: {str(e)}")
+        return {"error": str(e), "chunks": 0}
+
+
+def ingest_all_documents():
+    """Ingest all PDF documents from the RAG documents directory"""
+    rag_documents_path = Path(settings.RAG_DOCUMENTS_PATH)
+    
+    if not rag_documents_path.exists():
+        logger.error(f"RAG documents directory not found: {rag_documents_path}")
+        return {}
+    
+    # Get all PDF files and sort deterministically
+    pdf_files = sorted(rag_documents_path.glob("*.pdf"))
+    
+    if not pdf_files:
+        logger.warning(f"No PDF files found in {rag_documents_path}")
+        return {}
+    
+    logger.info(f"Found {len(pdf_files)} PDF files to ingest")
+    
+    results = {}
+    db = SessionLocal()
+    
+    try:
+        for pdf_path in pdf_files:
+            try:
+                result = ingest_document(pdf_path, db)
+                results[pdf_path.name] = result
+            except Exception as e:
+                logger.error(f"Failed to ingest {pdf_path.name}: {str(e)}")
+                results[pdf_path.name] = {"error": str(e), "chunks": 0}
+        
+        logger.info(f"Ingestion complete. Results: {results}")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Fatal error during ingestion: {str(e)}")
+        return {}
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    import sys
+    import io
+    # Set UTF-8 encoding for stdout
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    logging.basicConfig(level=logging.INFO)
+    
+    print("Starting RAG document ingestion...")
+    results = ingest_all_documents()
+    
+    if results:
+        print("\nIngestion Results:")
+        for filename, result in results.items():
+            if "error" in result:
+                print(f"  {filename}: ERROR - {result['error']}")
+            elif "skipped" in result:
+                print(f"  {filename}: SKIPPED (already ingested)")
+            else:
+                print(f"  {filename}: INGESTED ({result['chunks']} chunks)")
+    else:
+        print("No documents to ingest")

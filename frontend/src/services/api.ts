@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Patient, PatientCreate, Analysis, AnalysisCreate, AnalysisListItem } from '../types';
+import type { Patient, PatientCreate, Analysis, AnalysisCreate, AnalysisListItem, ClinicalSupportResponse } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
@@ -46,6 +46,12 @@ export const createAnalysis = async (analysis: AnalysisCreate): Promise<Analysis
   formData.append('weight', analysis.weight.toString());
   formData.append('joint_pain', analysis.joint_pain);
   formData.append('pregnancies', analysis.pregnancies.toString());
+  // Phase 2 additional clinical fields
+  if (analysis.menopausal_status) formData.append('menopausal_status', analysis.menopausal_status);
+  if (analysis.smoking) formData.append('smoking', analysis.smoking);
+  if (analysis.alcohol) formData.append('alcohol', analysis.alcohol);
+  if (analysis.previous_fracture) formData.append('previous_fracture', analysis.previous_fracture);
+  if (analysis.long_term_steroid_use) formData.append('long_term_steroid_use', analysis.long_term_steroid_use);
   formData.append('image', analysis.image);
 
   const response = await api.post('/analyses', formData, {
@@ -68,6 +74,12 @@ export const getAnalysis = async (analysisId: number): Promise<Analysis> => {
 
 export const deleteAnalysis = async (analysisId: number): Promise<void> => {
   await api.delete(`/analyses/${analysisId}`);
+};
+
+// Clinical Support endpoint
+export const getClinicalSupport = async (analysisId: number): Promise<ClinicalSupportResponse> => {
+  const response = await api.post(`/analyses/${analysisId}/clinical-support`);
+  return response.data;
 };
 
 export default api;

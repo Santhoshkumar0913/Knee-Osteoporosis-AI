@@ -27,6 +27,12 @@ async def create_analysis(
     weight: float = Form(...),
     joint_pain: str = Form(...),
     pregnancies: int = Form(...),
+    # Phase 2 additional clinical fields
+    menopausal_status: str = Form(None),
+    smoking: str = Form(None),
+    alcohol: str = Form(None),
+    previous_fracture: str = Form(None),
+    long_term_steroid_use: str = Form(None),
     image: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -63,7 +69,12 @@ async def create_analysis(
             height=height,
             weight=weight,
             joint_pain=joint_pain,
-            pregnancies=pregnancies
+            pregnancies=pregnancies,
+            menopausal_status=menopausal_status,
+            smoking=smoking,
+            alcohol=alcohol,
+            previous_fracture=previous_fracture,
+            long_term_steroid_use=long_term_steroid_use
         )
         
         # Create analysis record
@@ -77,6 +88,12 @@ async def create_analysis(
             bmi=prediction_result['bmi'],
             joint_pain=prediction_result['joint_pain'],
             pregnancies=prediction_result['pregnancies'],
+            # Phase 2 additional clinical fields
+            menopausal_status=prediction_result.get('menopausal_status'),
+            smoking=prediction_result.get('smoking'),
+            alcohol=prediction_result.get('alcohol'),
+            previous_fracture=prediction_result.get('previous_fracture'),
+            long_term_steroid_use=prediction_result.get('long_term_steroid_use'),
             predicted_class=prediction_result['predicted_class'],
             predicted_diagnosis=prediction_result['predicted_diagnosis'],
             normal_probability=prediction_result['normal_probability'],

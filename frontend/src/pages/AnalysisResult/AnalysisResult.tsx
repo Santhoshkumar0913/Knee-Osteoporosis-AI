@@ -184,6 +184,12 @@ const AnalysisResult = () => {
           View Patient History
         </Link>
         <button
+          className="action-button clinical-support-button"
+          onClick={() => navigate(`/analyses/${analysisId}/clinical-support`)}
+        >
+          View Clinical Support
+        </button>
+        <button
           className="action-button primary-button"
           onClick={() => navigate(`/patients/${analysis.patient_id}/analysis/new`)}
         >

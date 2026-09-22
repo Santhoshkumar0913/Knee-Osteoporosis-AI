@@ -33,6 +33,13 @@ class Analysis(Base):
     joint_pain = Column(String(50), nullable=False)
     pregnancies = Column(Integer, nullable=False)
     
+    # Phase 2 additional clinical fields
+    menopausal_status = Column(String(50), nullable=True)
+    smoking = Column(String(10), nullable=True)
+    alcohol = Column(String(10), nullable=True)
+    previous_fracture = Column(String(10), nullable=True)
+    long_term_steroid_use = Column(String(10), nullable=True)
+    
     # DINOv2 results
     predicted_class = Column(Integer, nullable=False)
     predicted_diagnosis = Column(String(50), nullable=False)
