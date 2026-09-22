@@ -1,16 +1,28 @@
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: "DM Sans", "Segoe UI", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light;
-  color: #333;
-  background-color: #f5f5f5;
-
+  color: #162c3b;
+  background: #eef4f3;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --ink: #162c3b;
+  --muted: #647784;
+  --teal: #197d78;
+  --teal-dark: #12605d;
+  --teal-soft: #e1f1ee;
+  --navy: #193b53;
+  --line: #d7e4e2;
+  --surface: #ffffff;
+  --surface-soft: #f6faf9;
+  --warning: #a96f13;
+  --warning-soft: #fff4d9;
+  --danger: #b6474d;
+  --shadow: 0 14px 34px rgba(26, 59, 78, 0.08);
+  --radius: 14px;
+  --radius-sm: 9px;
 }
 
 * {
@@ -23,10 +35,43 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: #eef4f3;
 }
 
 #root {
   width: 100%;
   margin: 0;
   text-align: left;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(25, 125, 120, 0.28);
+  outline-offset: 2px;
+}
+
+.loading,
+.error {
+  min-height: 45vh;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.error {
+  color: var(--danger);
 }
