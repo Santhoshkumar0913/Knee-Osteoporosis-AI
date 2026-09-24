@@ -991,9 +991,6 @@ Knee-Osteoporosis-AI/
 ├── storage/
 │   └── uploads/
 │
-├── docs/
-│   ├── PHASE-2-PRD.md
-│   └── DEVIN-PHASE-2-PROMPT.md
 │
 ├── docker-compose.yml
 ├── .env.example
