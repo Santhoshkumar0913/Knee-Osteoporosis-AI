@@ -130,7 +130,7 @@ const NewAnalysis = () => {
         joint_pain: jointPain,
         pregnancies: pregnanciesNum,
         // Phase 2 additional clinical fields
-        menopausal_status: menopausalStatus || undefined,
+        menopausal_status: gender === 'female' ? menopausalStatus || undefined : undefined,
         smoking: smoking || undefined,
         alcohol: alcohol || undefined,
         previous_fracture: previousFracture || undefined,
@@ -232,6 +232,7 @@ const NewAnalysis = () => {
                   setGender(e.target.value);
                   if (e.target.value === 'male') {
                     setPregnancies('0');
+                    setMenopausalStatus('');
                   }
                 }}
                 required
@@ -317,6 +318,7 @@ const NewAnalysis = () => {
                 id="menopausalStatus"
                 value={menopausalStatus}
                 onChange={(e) => setMenopausalStatus(e.target.value)}
+                disabled={gender !== 'female'}
               >
                 <option value="">Select option</option>
                 <option value="premenopausal">Premenopausal</option>
