@@ -510,9 +510,6 @@ Knee-Osteoporosis-AI/
 ├── storage/
 │   └── uploads/
 │
-├── docs/
-│   ├── DEVIN-PHASE-2-PROMPT.md
-│   └── PHASE-2-PRD.md
 │
 ├── docker-compose.yml
 ├── .env.example
@@ -613,7 +610,6 @@ These are software verification results, not evidence of clinical validation.
 
 The root `PRD.md` is the authoritative project specification and describes the current as-built architecture and workflow.
 
-The documents under `docs/` are retained as historical development specifications for the V1/Phase 2 implementation process.
 
 ---
 
