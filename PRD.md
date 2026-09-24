@@ -1,480 +1,309 @@
 # PRD — Knee Osteoporosis AI
 
-## 1. Project
+## Unified As-Built Product Requirements Document
 
-**Repository:** https://github.com/Santhoshkumar0913/Knee-Osteoporosis-AI.git
+**Full project title:** Adaptive Multimodal AI and LLM Framework for Early Osteoporosis Screening and Evidence-Based Clinical Decision Support using Knee X-ray Images  
+**Product:** Knee Osteoporosis AI  
+**Repository:** `Santhoshkumar0913/Knee-Osteoporosis-AI`  
+**Current development branch:** `feature/rag-llm`  
+**Document type:** Unified V1 + Phase 2 as-built Product Requirements Document  
+**Status:** Current implementation specification
 
-**Project title:** Adaptive Multimodal AI and LLM Framework for Early Osteoporosis Screening
+> This document is the single project PRD. It consolidates the original V1 PRD, the Phase 2 RAG/LLM specification, and the verified implementation in the current feature branch. Where the original specifications and the implementation differ, the implementation is explicitly identified as the as-built behavior.
 
-This repository is the **only target repository** for the web application. Do not create the application in a new repository.
+---
 
-## 2. Scope of this implementation
+## 1. Executive Summary
 
-Build the application only up to the point where the complete ML analysis is performed and the results are displayed and saved.
+Knee Osteoporosis AI is a local-first web application for AI-assisted osteoporosis screening using knee X-ray images together with structured patient clinical information.
 
-### In scope
+The system contains four major layers:
+
+```text
+1. Dedicated ML inference
+2. Persistent patient and analysis data
+3. Medical evidence retrieval
+4. Grounded LLM Clinical Support
+```
+
+The V1 screening workflow uses a DINOv2-based image classifier to classify a knee X-ray into Normal, Osteopenia, or Osteoporosis. The predicted class is automatically inserted into the existing clinical feature vector used by a Random Forest T-score model and a Gradient Boosting Z-score model. The analysis, clinical context, and local X-ray reference are persisted in PostgreSQL/local storage.
+
+Phase 2 adds an on-demand Clinical Support feature. The backend loads a saved analysis, builds a concise evidence query, generates a BGE embedding, retrieves 3–5 relevant passages from the approved local medical corpus using PostgreSQL/pgvector, sends permitted case context plus retrieved evidence to OpenRouter, parses the structured response, and returns it to the Clinical Support UI.
+
+Clinical Support is an evidence-grounded educational/decision-support layer. It does not replace professional diagnosis, densitometry, clinical judgement, or treatment decisions.
+
+---
+
+## 2. Problem Statement
+
+A knee X-ray screening model can produce a class prediction but does not by itself provide context-aware, evidence-grounded guidance. The project connects the screening result with structured clinical data, trusted medical evidence, and a controlled LLM synthesis layer so that the user can review the result in a more useful clinical-support context.
+
+---
+
+## 3. Product Goal
+
+Provide a complete local-first workflow in which a user can:
+
+1. Create or select a patient.
+2. Upload a knee X-ray.
+3. Enter clinical information.
+4. Run the existing ML inference pipeline.
+5. Review the predicted class, probabilities, confidence, and model-estimated T/Z scores.
+6. Preserve the analysis in patient history.
+7. Request Clinical Support on demand.
+8. Review evidence-grounded support and source organizations/years.
+
+The application must preserve strict boundaries between model inference, evidence retrieval, and LLM synthesis.
+
+---
+
+## 4. Scope
+
+### 4.1 Implemented V1 scope
 
 - React frontend
+- TypeScript
+- Vite
 - FastAPI backend
-- PostgreSQL database using Docker
-- pgAdmin using Docker
-- Local X-ray image storage
+- Python
+- PostgreSQL
+- Docker Compose
+- pgAdmin
+- Local X-ray storage
 - Patient management
 - Multiple analyses per patient
 - X-ray upload and preview
 - Clinical input form
 - Automatic BMI calculation
-- Gender-dependent pregnancy input
+- Backend BMI recalculation
+- Gender-dependent pregnancy handling
 - DINOv2 inference
-- T-score inference
-- Z-score inference
-- Display classification probabilities/confidence
-- Display T-score and Z-score estimates and model-based ranges
-- Save analyses and image references
-- View patient history
-- View individual analysis details
-- Delete analysis/patient data
-- Model version tracking
+- Three-class image classification
+- Class probabilities and confidence
+- T-score Random Forest estimation
+- Z-score Gradient Boosting estimation
+- Empirical model prediction-error ranges
+- Analysis persistence
+- Patient history
+- Analysis deletion
+- Patient deletion with image cleanup
 
-### Explicitly out of scope for this phase
+### 4.2 Implemented Phase 2 scope
 
-Do **not** implement RAG, vector databases, LLM integration, medical-document retrieval, or LLM-generated clinical reports in this phase.
+- Menopausal status
+- Smoking
+- Alcohol
+- Previous fracture
+- Long-term steroid use
+- Local four-document RAG corpus
+- PDF text extraction
+- Chunking and metadata
+- SHA-256 document checksums
+- Local BGE embeddings
+- PostgreSQL/pgvector vector storage
+- Automatic evidence-query construction
+- 3–5 chunk retrieval
+- OpenRouter REST integration
+- Structured Clinical Support parsing
+- Evidence-derived source display
+- Clinical Support API
+- Clinical Support UI
+- Loading/error/retry/regenerate states
+- End-to-end verification
+- Responsive frontend styling
 
-The application should be structured so these can be added later without redesigning the core patient/analysis workflow.
+### 4.3 Explicitly not implemented
 
----
-
-# 3. Existing ML models
-
-The ML models have already been trained in Google Colab. The web application must use the existing trained models and must **not retrain them**.
-
-The user will manually copy the model files into the appropriate backend model folder before running the backend.
-
-Expected model files:
-
-```text
-backend/
-└── models/
-    ├── dinov2_experiment2_best.pth
-    ├── t_score_random_forest.joblib
-    ├── z_score_gradient_boosting.joblib
-    └── model_metadata.json
-```
-
-### Model roles
-
-- `dinov2_experiment2_best.pth` → knee X-ray classification
-- `t_score_random_forest.joblib` → T-score estimation
-- `z_score_gradient_boosting.joblib` → Z-score estimation
-- `model_metadata.json` → model/configuration metadata
-
-The backend must load these models at startup and keep them in memory for inference.
-
-Do not replace the models with newly trained models.
-
----
-
-# 4. ML pipeline
-
-The complete V1 prediction pipeline is:
-
-```text
-React frontend
-      ↓
-FastAPI
-      ↓
-Validate input
-      ↓
-X-ray preprocessing
-      ↓
-DINOv2
-      ↓
-Normal / Osteopenia / Osteoporosis
-      ↓
-Predicted class ID
-      ↓
-Build clinical feature vector
-      ↓
-T-score Random Forest
-      ↓
-Z-score Gradient Boosting
-      ↓
-Calculate model-based ranges
-      ↓
-Return JSON result
-      ↓
-React displays result
-      ↓
-Save analysis + image reference
-```
-
-## 4.1 DINOv2 classes
-
-```text
-1 → Normal
-2 → Osteopenia
-3 → Osteoporosis
-```
-
-The user must **not** manually enter the predicted class.
-
-The DINOv2 class is automatically passed into the clinical models by FastAPI.
+- XAI / Grad-CAM / heatmaps
+- Completed patient-only classification branch
+- Validated probability-level multimodal fusion classifier
+- LLM fine-tuning
+- Autonomous diagnosis
+- Prescription generation
+- Medication dosage instructions
+- Automated treatment decisions
+- Arbitrary medical chat
+- Automatic web scraping
+- Authentication/login
+- PDF export
+- Cloud vector database
+- Second vector database
+- Cloud image storage
+- Multilingual support
+- Persisting generated Clinical Support reports
 
 ---
 
-# 5. Clinical model input
+## 5. Product Boundaries
 
-The current clinical model feature vector is:
+The system is an AI-assisted screening and evidence-support application.
 
-```text
-Age
-Gender
-BMI
-Weight
-Height
-Joint Pain
-Number of Pregnancies
-Class
-Pregnancy_Missing
-```
+It must not be represented as:
 
-For this web application's simplified V1 workflow:
+- a replacement for DXA/QUS measurement;
+- a definitive diagnostic system;
+- an autonomous clinical decision maker;
+- a medication-prescribing system.
 
-```text
-Male:
-  Number of Pregnancies = 0
-  Pregnancy_Missing = 0
+The LLM is a synthesis component. It does not replace the dedicated ML models.
 
-Female:
-  Number of Pregnancies = required user input
-  Pregnancy_Missing = 0
-```
-
-Do not add a "Not provided" pregnancy option in V1.
-
-The backend must construct this vector in the exact expected order.
+The five Phase 2 clinical context fields are used for context/RAG and are not added to the frozen V1 ML feature vector.
 
 ---
 
-# 6. Technology stack
+## 6. Complete Product Workflow
 
-## Frontend
-
-- React
-- TypeScript preferred
-- Vite preferred
-- Responsive modern UI
-
-## Backend
-
-- Python
-- FastAPI
-- Uvicorn
-- Pydantic
-- PyTorch
-- timm
-- scikit-learn
-- joblib
-- Pillow
-
-## Database / infrastructure
-
-- PostgreSQL
-- Docker Desktop
-- Docker Compose
-- pgAdmin
-
-## Development
-
-- VS Code
-- Git
-- GitHub
-- Devin
-
-Training remains in Google Colab. Local development only needs to perform inference.
-
-A local NVIDIA GPU is not required for V1; CPU inference is acceptable.
-
----
-
-# 7. Repository requirement
-
-All development must happen inside:
-
-```text
-https://github.com/Santhoshkumar0913/Knee-Osteoporosis-AI.git
-```
-
-Do not create a parallel repository.
-
-First inspect the existing repository contents. Reuse compatible existing code where appropriate, but do not allow the old project structure to force incorrect architecture. Refactor carefully when necessary.
-
-Commit changes in logical stages.
-
----
-
-# 8. Proposed project structure
-
-```text
-Knee-Osteoporosis-AI/
-│
-├── frontend/
-│   ├── src/
-│   │   ├── pages/
-│   │   │   ├── Home/
-│   │   │   ├── Patients/
-│   │   │   ├── PatientDetails/
-│   │   │   ├── NewAnalysis/
-│   │   │   └── AnalysisResult/
-│   │   ├── components/
-│   │   ├── services/
-│   │   ├── types/
-│   │   └── ...
-│   └── ...
-│
-├── backend/
-│   ├── app/
-│   │   ├── main.py
-│   │   ├── api/
-│   │   │   ├── health.py
-│   │   │   ├── patients.py
-│   │   │   └── analyses.py
-│   │   ├── core/
-│   │   ├── db/
-│   │   ├── schemas/
-│   │   └── services/
-│   │       ├── image_model.py
-│   │       ├── clinical_model.py
-│   │       ├── prediction_service.py
-│   │       └── storage_service.py
-│   ├── models/
-│   │   ├── dinov2_experiment2_best.pth
-│   │   ├── t_score_random_forest.joblib
-│   │   ├── z_score_gradient_boosting.joblib
-│   │   └── model_metadata.json
-│   ├── tests/
-│   ├── requirements.txt
-│   └── ...
-│
-├── storage/
-│   └── uploads/
-│
-├── docker-compose.yml
-├── .env.example
-├── .gitignore
-└── README.md
-```
-
-The exact internal structure may be adjusted if Devin has a cleaner maintainable implementation, but the separation of frontend/backend/models/storage must remain.
-
----
-
-# 9. Docker database setup
-
-Use Docker Compose to run:
-
-```text
-PostgreSQL
-pgAdmin
-```
-
-Do **not** require PostgreSQL Server to be installed directly on Windows.
-
-Database credentials must come from environment variables.
-
-Example variables:
-
-```text
-POSTGRES_DB=osteoporosis_ai
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=<local-secret>
-```
-
-Also provide backend database configuration through `.env` / environment variables.
-
-Never commit real passwords or secrets.
-
-pgAdmin should connect to the PostgreSQL container through the Docker network.
-
----
-
-# 10. Main application workflow
+### 6.1 Master workflow
 
 ```text
 Home
   ↓
-Start Analysis
-  ↓
 Patients
   ↓
-Select existing patient
-  OR
-Create new patient
+Select Existing Patient OR Create Patient
+  ↓
+Patient Details
   ↓
 New Analysis
   ↓
-Upload X-ray
-  +
-Enter clinical details
+Upload Knee X-ray + Clinical Information
   ↓
-Run Analysis
+Frontend validation + BMI display
   ↓
-DINOv2 prediction
+POST /api/analyses
   ↓
-T-score + Z-score estimation
+FastAPI validation
+  ↓
+DINOv2 preprocessing and inference
+  ↓
+Class + probabilities + confidence
+  ↓
+Build fixed V1 clinical feature vector
+  ↓
+T-score Random Forest
+  ↓
+Z-score Gradient Boosting
+  ↓
+Calculate empirical ranges
+  ↓
+Save Analysis + Local X-ray reference
   ↓
 Analysis Result
   ↓
-Save Analysis
+View Clinical Support
   ↓
-Patient History
+POST /api/analyses/{analysis_id}/clinical-support
+  ↓
+Load saved analysis/context
+  ↓
+Build concise evidence query
+  ↓
+BGE query embedding
+  ↓
+PostgreSQL/pgvector cosine similarity search
+  ↓
+Retrieve 3–5 evidence chunks
+  ↓
+Build grounded prompt
+  ↓
+OpenRouter REST API
+  ↓
+Parse structured response
+  ↓
+Attach trusted source metadata + disclaimer
+  ↓
+Clinical Support UI
 ```
 
-A patient may have many analyses:
+### 6.2 RAG vs LLM
 
-```text
-Patient P0001
-├── Analysis A0001
-├── Analysis A0002
-├── Analysis A0003
-└── Analysis A0004
-```
-
-Never overwrite previous analyses.
+**RAG retrieves evidence. The LLM synthesizes the supplied evidence and saved case context into structured Clinical Support.**
 
 ---
 
-# 11. Pages
+## 7. User and Usage Model
 
-## 11.1 Home
+The primary usage pattern is:
 
-Keep the home page simple.
+```text
+Create/select patient
+→ Start analysis
+→ Upload X-ray
+→ Enter clinical data
+→ Run analysis
+→ Review ML results
+→ View Clinical Support
+→ Review evidence-grounded support
+→ Return to history or start another analysis
+```
+
+One patient can have multiple independent analyses. Previous analyses are not overwritten.
+
+---
+
+## 8. Frontend Requirements
+
+### 8.1 Routes
+
+```text
+/                                      Home
+/patients                              Patients
+/patients/:patientId                   Patient Details
+/patients/:patientId/analysis/new     New Analysis
+/analyses/:analysisId                  Analysis Result
+/analyses/:analysisId/clinical-support Clinical Support
+```
+
+### 8.2 Home
+
+Display the project purpose and a Start Analysis action.
+
+### 8.3 Patients
 
 Display:
 
-```text
-Knee Osteoporosis AI
+- Patient ID
+- Name
+- Created date
+- View action
+- Delete action
 
-AI-assisted screening using knee X-ray images
-and patient clinical information.
+Create patient with a generated patient code.
 
-[ Start Analysis ]
-```
-
-Main navigation can be:
-
-```text
-Home | Patients
-```
-
-Do not add unnecessary dashboard statistics in V1.
-
----
-
-## 11.2 Patients
-
-Show patients in a clean table/list.
-
-Minimum information:
-
-```text
-Patient ID
-Name
-Created At
-Action
-```
-
-Example:
-
-```text
-P0001   Arun Kumar
-P0002   Arun Kumar
-P0003   Priya Kumar
-```
-
-Duplicate names are allowed.
-
-Patient ID is unique and generated automatically.
-
-Recommended display format:
-
-```text
-P0001 — Arun Kumar
-```
-
----
-
-## 11.3 Create Patient
-
-Patient fields:
-
-```text
-Name
-```
-
-Patient ID is system-generated.
-
-Created timestamp is system-generated.
-
-Do not add phone/email/date-of-birth fields unless explicitly requested later.
-
-After creation, take the user into the patient's details/analysis workflow.
-
----
-
-## 11.4 Patient Details
+### 8.4 Patient Details
 
 Display:
 
-```text
-Patient ID
-Name
-Created At
-```
+- Patient ID
+- Name
+- Created date
+- Analysis history
+- New Analysis action
+- Delete Patient action
 
-Then show Analysis History.
+Analysis history includes date, diagnosis, confidence, T-score, Z-score, and analysis actions.
 
-Suggested columns:
+### 8.5 New Analysis
 
-```text
-Date
-Diagnosis
-Confidence
-T-score
-Z-score
-View
-```
-
-Each analysis must have its own record.
-
-Provide:
+Collect:
 
 ```text
-[ New Analysis ]
-[ Delete Patient ]
+Age
+Gender
+Height (m)
+Weight (kg)
+BMI (auto-calculated/read-only)
+Joint Pain
+Number of Pregnancies
+Menopausal Status
+Smoking
+Alcohol
+Previous Fracture
+Long-term Steroid Use
+Knee X-ray
 ```
 
-Deleting a patient must also handle its analyses and associated local images after confirmation.
-
----
-
-# 12. New Analysis page
-
-The user reaches this page only after selecting a patient.
-
-## 12.1 X-ray upload
-
-Provide a modern drag-and-drop / file picker UI:
-
-```text
-Upload Knee X-ray
-
-Drag & drop image here
-or
-[ Choose Image ]
-```
-
-Allowed formats:
+Supported image formats:
 
 ```text
 PNG
@@ -483,301 +312,219 @@ JPEG
 WEBP
 ```
 
-After selecting an image, show a preview:
+Current frontend image-size limit: 10 MB.
 
-```text
-X-ray Preview
-[ image ]
+### 8.6 Analysis Result
 
-[ Change Image ]
-```
+Display:
 
-Validate file format and reasonable file size.
+- predicted class;
+- confidence;
+- Normal probability;
+- Osteopenia probability;
+- Osteoporosis probability;
+- model-estimated T-score and range;
+- model-estimated Z-score and range;
+- patient/clinical context;
+- View Patient History;
+- View Clinical Support;
+- New Analysis.
 
-Do not expose backend stack traces to the frontend.
+### 8.7 Clinical Support
+
+Display:
+
+- Patient name and ID
+- Predicted class
+- Confidence and class probabilities
+- Model-estimated T-score and empirical range
+- Model-estimated Z-score and empirical range
+- All clinical context fields
+- Explanation
+- What You Can Do Now
+- Talk to Your Doctor About
+- Testing and Follow-up
+- Treatment Information
+- Sources as `Organization — Year`
+- Grounding Note
+- Exact disclaimer
+- Loading/error/retry/regenerate states
 
 ---
 
-# 13. Clinical form
+## 9. V1 Machine-Learning Workflow
 
-User-facing inputs:
+### 9.1 Model artifacts
+
+| Artifact | Role |
+|---|---|
+| `dinov2_experiment2_best.pth` | Knee X-ray classification |
+| `t_score_random_forest.joblib` | T-score estimation |
+| `z_score_gradient_boosting.joblib` | Z-score estimation |
+| `model_metadata.json` | Model/configuration metadata |
+
+Model weights are local files and are ignored by Git.
+
+### 9.2 DINOv2 architecture
+
+The current implementation uses:
 
 ```text
-Age
-Gender
-Height (m)
-Weight (kg)
-BMI (auto-calculated)
-Joint Pain
-Number of Pregnancies
+DINOv2 ViT-Small / 14
+Input: 518 × 518
+Feature dimension: 384
+Output classes: 3
 ```
 
-## BMI
+Classification head:
 
-BMI must be calculated automatically:
+```text
+LayerNorm(384)
+→ Dropout(0.40)
+→ Linear(384, 128)
+→ GELU
+→ Dropout(0.30)
+→ Linear(128, 3)
+```
+
+### 9.3 Image preprocessing
+
+```text
+Input image
+→ RGB conversion
+→ aspect-ratio-preserving resize
+→ LANCZOS interpolation
+→ centered zero padding
+→ 518 × 518
+→ tensor conversion
+→ ImageNet normalization
+→ DINOv2
+```
+
+### 9.4 Class mapping
+
+```text
+1 → Normal
+2 → Osteopenia
+3 → Osteoporosis
+```
+
+The user does not enter the class manually.
+
+### 9.5 Clinical feature vector
+
+The V1 feature order is frozen as:
+
+```text
+[Age,
+ Gender,
+ BMI,
+ Weight,
+ Height,
+ Joint Pain,
+ Number of Pregnancies,
+ Class,
+ Pregnancy_Missing]
+```
+
+Current encodings:
+
+```text
+Gender:
+Male = 0
+Female = 1
+
+Joint Pain:
+No = 0
+Yes = 1
+
+Pregnancy_Missing = 0
+```
+
+The DINOv2 class is automatically inserted into the vector.
+
+### 9.6 Pregnancy behavior
+
+For male patients:
+
+```text
+Pregnancies = 0
+field disabled in UI
+```
+
+For female patients:
+
+```text
+Pregnancies = required numeric input
+```
+
+### 9.7 BMI
 
 ```text
 BMI = Weight / Height²
 ```
 
-Example:
-
-```text
-Height = 1.58 m
-Weight = 68 kg
-BMI = 27.24
-```
-
-BMI must be read-only in the UI.
-
-The backend must recalculate BMI from height and weight and use the backend-calculated value for inference.
-
-Do not trust a client-supplied BMI value.
-
-## Gender / pregnancy behavior
-
-When gender is Male:
-
-```text
-Number of Pregnancies = 0
-```
-
-The pregnancy field is disabled automatically.
-
-When gender is Female:
-
-```text
-Number of Pregnancies = required numeric input
-```
-
-Keep this simple. No "Not provided" option.
+The frontend displays BMI as read-only. The backend recalculates BMI and uses its own calculated value for inference.
 
 ---
 
-# 14. Input validation
+## 10. T-score and Z-score Estimation
 
-Validate on both frontend and backend.
+### T-score
 
-At minimum:
+Model:
 
 ```text
-Age > 0
-Height > 0
-Weight > 0
-BMI derived from valid values
-Pregnancy = 0 for Male
-Pregnancy required for Female
-Joint Pain is a supported value
-Gender is a supported value
-X-ray is a supported image format
+Random Forest
 ```
 
-Use sensible bounds to prevent obviously invalid inputs.
+### Z-score
 
-Do not silently accept malformed requests.
+Model:
+
+```text
+Gradient Boosting
+```
+
+### Empirical ranges
+
+Current configured margins:
+
+```text
+T-score margin = ±0.3715
+Z-score margin = ±1.2232
+```
+
+Therefore:
+
+```text
+T lower = prediction - 0.3715
+T upper = prediction + 0.3715
+
+Z lower = prediction - 1.2232
+Z upper = prediction + 1.2232
+```
+
+These are empirical prediction-error margins from the project's trained models. They are **not clinical confidence intervals** and the values are **not measured DXA/QUS results**.
 
 ---
 
-# 15. Inference behavior
+## 11. Persistence and Storage
 
-When the user clicks:
-
-```text
-[ Run Analysis ]
-```
-
-show an analysis/loading state.
-
-Example:
+### 11.1 Patient entity
 
 ```text
-Analyzing X-ray...
-
-✓ Image uploaded
-✓ X-ray classification
-● Estimating bone scores
-○ Preparing results
-```
-
-Disable repeated submission while the request is running.
-
----
-
-# 16. Backend prediction pipeline
-
-FastAPI should implement a single orchestrated prediction service.
-
-Conceptually:
-
-```text
-Request
- ↓
-Validate patient + clinical inputs
- ↓
-Save/prepare uploaded image
- ↓
-Apply exact DINOv2 inference preprocessing
- ↓
-DINOv2 model
- ↓
-Class ID + probabilities
- ↓
-Recalculate BMI
- ↓
-Build 9-value clinical feature vector
- ↓
-T-score RF
- ↓
-Z-score GB
- ↓
-Calculate empirical model ranges
- ↓
-Return structured result
-```
-
-Do not duplicate this logic across API routes.
-
----
-
-# 17. Result page
-
-The result page should be clear and simple.
-
-## 17.1 X-ray classification
-
-Display:
-
-```text
-X-ray Classification
-
-Predicted Class
-Osteopenia
-
-Confidence
-93.27%
-```
-
-Then class probabilities:
-
-```text
-Normal          2.81%
-Osteopenia     93.27%
-Osteoporosis    3.92%
-```
-
-The actual values must come from the model response; the above numbers are only an example of presentation.
-
-Do not hard-code example results.
-
-## 17.2 Bone score estimates
-
-Display:
-
-```text
-Estimated T-score
--1.92
-
-Estimated range
--2.29 to -1.55
-```
-
-and:
-
-```text
-Estimated Z-score
--0.96
-
-Estimated range
--2.18 to 0.26
-```
-
-The UI must clearly use wording such as:
-
-```text
-Model-estimated T-score
-Model-estimated Z-score
-```
-
-These are model estimates, not measured DXA/QUS values and not clinical confidence intervals.
-
-## 17.3 Patient information
-
-Show the inputs used for the analysis:
-
-```text
-Patient ID
-Name
-Age
-Gender
-Height
-Weight
-BMI
-Joint Pain
-Number of Pregnancies
-```
-
-## 17.4 Actions
-
-Provide:
-
-```text
-[ Save Analysis ]
-[ View Patient History ]
-```
-
-If the application saves automatically at analysis creation time, the UI should clearly indicate that instead of creating duplicate records.
-
----
-
-# 18. T-score / Z-score range logic
-
-The current model-based empirical margins are:
-
-```text
-T-score margin: ±0.3715
-Z-score margin: ±1.2232
-```
-
-Calculate:
-
-```text
-T-score lower = prediction - 0.3715
-T-score upper = prediction + 0.3715
-
-Z-score lower = prediction - 1.2232
-Z-score upper = prediction + 1.2232
-```
-
-Use metadata/configuration rather than scattering these values across frontend code.
-
-These ranges are empirical prediction-error ranges used by this project. Do not label them as medical confidence intervals.
-
----
-
-# 19. Database design
-
-Use PostgreSQL.
-
-## 19.1 patients table
-
-Suggested fields:
-
-```text
-id                primary key
-patient_code      unique
+id
+patient_code
 name
 created_at
 ```
 
-`patient_code` is the user-facing ID such as `P0001`.
-
-## 19.2 analyses table
-
-Suggested fields:
+### 11.2 Analysis entity
 
 ```text
 id
-patient_id             foreign key
+patient_id
 image_path
 created_at
 
@@ -788,6 +535,12 @@ weight
 bmi
 joint_pain
 pregnancies
+
+menopausal_status
+smoking
+alcohol
+previous_fracture
+long_term_steroid_use
 
 predicted_class
 predicted_diagnosis
@@ -807,37 +560,453 @@ z_score_upper
 model_version
 ```
 
-Add appropriate indexes and foreign-key behavior.
+### 11.3 Relationship
 
-A patient can have many analyses.
+```text
+Patient 1 ───── N Analysis
+```
 
----
+### 11.4 Image storage
 
-# 20. Image storage
-
-Do not store X-ray binary data in PostgreSQL for V1.
-
-Store images locally under:
+X-ray images are stored locally under:
 
 ```text
 storage/uploads/
 ```
 
-Recommended organization:
-
-```text
-storage/uploads/P0001/A0001_xray.webp
-```
-
 The database stores the image path/reference.
 
-The storage layer must be isolated so a later migration to object storage can be done without redesigning the database schema.
+Patient deletion cascades through analyses and the storage layer removes associated local images.
 
 ---
 
-# 21. API
+## 12. Phase 2 Clinical Context
 
-Implement at least:
+The following five fields were added without changing the V1 ML feature vector:
+
+```text
+Menopausal Status
+Smoking
+Alcohol
+Previous Fracture
+Long-term Steroid Use
+```
+
+Rules:
+
+- Menopausal status is a controlled selection.
+- Smoking is Yes/No.
+- Alcohol is Yes/No.
+- Previous fracture is Yes/No.
+- Long-term steroid use is Yes/No.
+
+These fields are persisted with the analysis and may contribute to retrieval/query context and Clinical Support generation.
+
+---
+
+## 13. RAG Corpus
+
+Only these four documents are approved for the MVP:
+
+| File | Organization | Year | Title |
+|---|---|---:|---|
+| `WHO_Fragility_Fractures.pdf` | WHO | 2024 | Fragility fractures |
+| `ISBMR_Osteoporosis_Adults.pdf` | ISBMR | 2021 | ISBMR position statement for diagnosis and treatment of osteoporosis in adults |
+| `IMS_Postmenopausal_Osteoporosis.pdf` | Indian Menopause Society | 2020 | Clinical practice guidelines on postmenopausal osteoporosis |
+| `BHOF_Clinicians_Guide.pdf` | BHOF | 2022 | The clinician's guide to prevention and treatment of osteoporosis |
+
+The PDFs are local-only and ignored by Git.
+
+Document metadata retained internally includes:
+
+```text
+title
+organization
+publication_year
+source_url
+```
+
+The UI displays only:
+
+```text
+Organization — Year
+```
+
+No patient data is stored in the RAG corpus.
+
+---
+
+## 14. RAG Ingestion
+
+The ingestion command is:
+
+```bash
+python -m app.rag.ingest
+```
+
+Current pipeline:
+
+```text
+Local PDF
+→ pypdf text extraction
+→ chunking
+→ metadata
+→ SHA-256 checksum
+→ local BGE embedding
+→ PostgreSQL/pgvector
+```
+
+Current configurable chunk settings:
+
+```text
+CHUNK_SIZE = 512
+CHUNK_OVERLAP = 50
+```
+
+The ingestion logic is designed to skip unchanged documents using the stored checksum and existing chunks.
+
+Ingestion is manual/one-time and is not part of FastAPI request startup.
+
+---
+
+## 15. Embeddings
+
+Current embedding model:
+
+```text
+BAAI/bge-base-en-v1.5
+```
+
+Runtime:
+
+```text
+Sentence Transformers
+```
+
+Embedding dimension:
+
+```text
+768
+```
+
+Embeddings run locally and are not sent to OpenRouter.
+
+---
+
+## 16. Vector Retrieval
+
+The actual implemented retrieval flow is:
+
+```text
+Saved analysis
+→ QueryBuilder
+→ BGE query embedding
+→ SQLAlchemy
+→ PostgreSQL + pgvector
+→ cosine similarity
+→ top 5 chunks
+```
+
+The current RAG model stores embeddings as PostgreSQL `vector(768)` values.
+
+### Important as-built clarification
+
+The original Phase 2 specification requires LlamaIndex, and LlamaIndex dependencies are present in the repository. However, the current verified runtime retrieval implementation performs the vector search directly through **SQLAlchemy + PostgreSQL/pgvector**.
+
+Therefore, this PRD does **not** claim that LlamaIndex is the active retrieval executor.
+
+This distinction is intentional so the PRD documents the actual deployed code path rather than the originally planned path.
+
+---
+
+## 17. Query Builder
+
+There is no user-facing free-text medical query box.
+
+The backend automatically creates a concise evidence query from the saved analysis.
+
+Current relevant context can include:
+
+```text
+Predicted diagnosis
+Age
+Gender
+BMI
+T-score
+Z-score
+Menopausal status
+Smoking
+Previous fracture
+Long-term steroid use
+```
+
+Patient name, patient ID, image path, internal identifiers, and secrets are excluded from the retrieval/LLM request context.
+
+---
+
+## 18. Clinical Support API
+
+### Endpoint
+
+```text
+POST /api/analyses/{analysis_id}/clinical-support
+```
+
+### Server-side flow
+
+```text
+analysis_id
+→ load saved Analysis
+→ build case context
+→ QueryBuilder
+→ RetrievalService
+→ 3–5 chunks
+→ OpenRouterService
+→ structured parser
+→ response schema
+→ React
+```
+
+The client does not provide or override the ML prediction, T-score, Z-score, or retrieved evidence.
+
+Generated Clinical Support is not persisted as a report.
+
+### Response sections
+
+```text
+analysis_id
+prediction_summary
+explanation
+what_you_can_do_now
+talk_to_your_doctor_about
+testing_and_follow_up
+treatment_information
+sources
+grounding_note
+disclaimer
+```
+
+---
+
+## 19. OpenRouter and LLM
+
+Provider:
+
+```text
+OpenRouter REST API
+```
+
+Configured initial model selector:
+
+```text
+openrouter/free
+```
+
+The model selector is environment configurable.
+
+The backend uses `httpx` for the REST request.
+
+Current request behavior includes:
+
+- backend-only API key;
+- 30-second client timeout;
+- retry handling for null/empty model content;
+- response-content fallback handling for model responses that place generated text in a reasoning field;
+- structured response parsing;
+- evidence-derived sources;
+- no generated-report persistence.
+
+---
+
+## 20. Structured Response Parsing
+
+The parser:
+
+- searches the model output for a decodable JSON object;
+- safely handles malformed or partial output;
+- normalizes clinical support list fields to `list[str]`;
+- defaults missing explanation content safely;
+- derives sources from retrieved metadata rather than model-generated citations.
+
+The model is not trusted to create the source list displayed to the user.
+
+---
+
+## 21. Clinical Support Content Rules
+
+The LLM should:
+
+1. Explain the existing analysis in simple language.
+2. Provide evidence-grounded educational actions where supported.
+3. Identify topics to discuss with a doctor.
+4. Provide testing/follow-up considerations where supported.
+5. Mention treatment information only when supported by retrieved evidence.
+6. Avoid unsupported medical claims.
+7. Avoid fabricated citations or source information.
+8. Never prescribe medications or dosages.
+9. Avoid presenting model estimates as direct clinical measurements.
+10. Direct medical decisions to a doctor.
+
+---
+
+## 22. Privacy and Security
+
+The OpenRouter request must not contain:
+
+```text
+Patient name
+Patient ID
+X-ray image
+X-ray path
+Filesystem paths
+Internal database IDs
+Database connection strings
+API keys/secrets
+```
+
+The X-ray itself is never sent to OpenRouter.
+
+RAG documents remain local.
+
+The following are excluded from Git:
+
+```text
+.env
+rag_documents/
+patient uploads
+.pth model weights
+.joblib model weights
+```
+
+Secrets are supplied through environment configuration.
+
+No authentication system is currently implemented.
+
+---
+
+## 23. Technology Stack
+
+### Frontend
+
+| Technology | Purpose |
+|---|---|
+| React | UI framework |
+| TypeScript | Frontend language |
+| Vite | Frontend build/dev tooling |
+| React Router | Route navigation |
+| Axios | API communication |
+| CSS | UI styling |
+| Oxlint | Frontend linting |
+
+### Backend
+
+| Technology | Purpose |
+|---|---|
+| Python | Backend/RAG/ML integration language |
+| FastAPI | REST API |
+| Uvicorn | ASGI server |
+| Pydantic | Request/response validation |
+| pydantic-settings | Environment configuration |
+| SQLAlchemy | Database ORM/access |
+| PyTorch | DINOv2 inference |
+| timm | DINOv2 backbone |
+| torchvision | Image transformation utilities |
+| scikit-learn | Regression models |
+| joblib | Load trained regression models |
+| Pillow | Image loading/manipulation |
+| Sentence Transformers | BGE embeddings |
+| pypdf | PDF text extraction |
+| pgvector | PostgreSQL vector operations |
+| httpx | OpenRouter REST requests |
+
+### Database / Infrastructure
+
+| Technology | Purpose |
+|---|---|
+| PostgreSQL 15-compatible pgvector image | Application and vector database |
+| pgAdmin | Database administration |
+| Docker | Container runtime |
+| Docker Compose | Local infrastructure orchestration |
+
+### Development environment
+
+- VS Code
+- Git
+- GitHub
+- Node.js/npm for frontend development tooling
+- Google Colab for model training
+
+Node.js is not used as the backend runtime.
+
+---
+
+## 24. Repository Structure
+
+```text
+Knee-Osteoporosis-AI/
+│
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── health.py
+│   │   │   ├── patients.py
+│   │   │   ├── analyses.py
+│   │   │   └── clinical_support.py
+│   │   ├── core/
+│   │   │   └── config.py
+│   │   ├── db/
+│   │   │   ├── database.py
+│   │   │   ├── models.py
+│   │   │   └── rag_models.py
+│   │   ├── rag/
+│   │   │   ├── ingest.py
+│   │   │   ├── embeddings.py
+│   │   │   ├── retrieval.py
+│   │   │   ├── query_builder.py
+│   │   │   └── llm_service.py
+│   │   ├── schemas/
+│   │   └── services/
+│   │       ├── image_model.py
+│   │       ├── clinical_model.py
+│   │       ├── prediction_service.py
+│   │       └── storage_service.py
+│   ├── models/
+│   ├── tests/
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── Home/
+│   │   │   ├── Patients/
+│   │   │   ├── PatientDetails/
+│   │   │   ├── NewAnalysis/
+│   │   │   ├── AnalysisResult/
+│   │   │   └── ClinicalSupport/
+│   │   ├── services/
+│   │   └── types/
+│   ├── package.json
+│   └── vite.config.ts
+│
+├── storage/
+│   └── uploads/
+│
+├── docs/
+│   ├── PHASE-2-PRD.md
+│   └── DEVIN-PHASE-2-PROMPT.md
+│
+├── docker-compose.yml
+├── .env.example
+├── .gitignore
+├── PRD.md
+└── README.md
+```
+
+The exact file tree may evolve, but these responsibilities are the current architectural boundaries.
+
+---
+
+## 25. API Inventory
 
 ```text
 GET    /api/health
@@ -848,423 +1017,317 @@ GET    /api/patients/{patient_id}
 DELETE /api/patients/{patient_id}
 
 POST   /api/analyses
-GET    /api/patients/{patient_id}/analyses
+GET    /api/analyses/patient/{patient_id}
 GET    /api/analyses/{analysis_id}
 DELETE /api/analyses/{analysis_id}
+
+POST   /api/analyses/{analysis_id}/clinical-support
 ```
 
-The main analysis endpoint should accept multipart form data because an X-ray image is uploaded with clinical fields.
+### Main responsibilities
 
-The response must be structured JSON and contain all result fields needed by the frontend.
+`POST /api/analyses` performs the saved V1 analysis workflow with multipart image upload and clinical inputs.
 
----
-
-# 22. Model loading
-
-Load models once during FastAPI startup/application initialization.
-
-Do not load `.pth`/`.joblib` files separately for every HTTP request.
-
-Handle model-loading failures clearly in backend logs and return a safe API error if inference cannot run.
+`POST /api/analyses/{analysis_id}/clinical-support` generates Clinical Support on demand from the saved analysis.
 
 ---
 
-# 23. Model compatibility requirements
+## 26. Validation and Error Handling
 
-The DINOv2 implementation must match the training/inference setup used to create the supplied checkpoint.
+The current application validates important inputs on the frontend and backend, including:
 
-Known model configuration:
+- positive age;
+- supported gender;
+- positive height/weight;
+- supported joint-pain value;
+- pregnancy rules;
+- supported Phase 2 context values when provided;
+- supported image extensions;
+- maximum upload size.
+
+User-facing failures should remain concise. Technical details remain in backend logs.
+
+Relevant failure areas include:
 
 ```text
-Architecture: DINOv2 ViT-S/14
-Input size: 518
-Feature dimension: 384
-Classification classes: 3
-```
-
-Use the same normalization and preprocessing expected by the trained checkpoint.
-
-Do not casually substitute another DINOv2 variant or image preprocessing pipeline.
-
-If exact preprocessing details are required from the supplied training code/checkpoint metadata, inspect the existing project/model metadata before implementation.
-
----
-
-# 24. Security and privacy
-
-This is a local-first application storing patient-related information and medical images.
-
-Requirements:
-
-- Keep PostgreSQL local through Docker.
-- Do not expose database ports publicly beyond local development unless explicitly configured later.
-- Keep secrets in `.env`.
-- Add `.env` to `.gitignore`.
-- Do not commit patient images/data.
-- Do not expose backend stack traces to users.
-- Support deletion of patient records and associated images.
-- Do not send patient information or X-rays to third-party services in this phase.
-
-No login/authentication system is required in V1.
-
----
-
-# 25. Medical presentation requirements
-
-The application is an AI-assisted screening/research system.
-
-Use language such as:
-
-```text
-AI-assisted screening
-Model prediction
-Model-estimated T-score
-Model-estimated Z-score
-```
-
-Do not present the model as producing a definitive clinical diagnosis.
-
-Do not label the estimated T-score/Z-score as measured DXA/QUS results.
-
-Do not invent medical recommendations or medical evidence.
-
----
-
-# 26. Error handling
-
-Handle at least:
-
-```text
-Invalid X-ray format
-Oversized image
 Missing patient
-Invalid age
-Invalid height
-Invalid weight
-Missing female pregnancy value
-Backend unavailable
-Database connection failure
+Invalid input
+Invalid image format
+Image too large
+Database failure
 Model loading failure
 Inference failure
+RAG retrieval failure
+OpenRouter failure
+Malformed LLM response
 ```
-
-Frontend should display short user-friendly messages.
-
-Backend logs should contain technical details.
 
 ---
 
-# 27. Testing requirements
+## 27. Docker and Database Configuration
 
-Before considering V1 complete, test:
-
-## Backend
-
-- Health endpoint
-- Patient CRUD behavior
-- Analysis creation
-- Analysis retrieval
-- Analysis deletion
-- Patient deletion
-- Database relationships
-- Input validation
-- Model loading
-- Prediction response
-
-## ML integration
-
-Use at least one known test image and verify that the web backend can reproduce the intended model inference pipeline.
-
-Verify that:
+Current Compose services:
 
 ```text
-DINOv2 class → clinical model Class input
+postgres
+pgadmin
 ```
 
-is automatic and correctly mapped.
+The database uses a pgvector-enabled PostgreSQL 15-compatible image.
 
-## Frontend
+Current Compose host mapping is:
+
+```text
+PostgreSQL host port: 5433
+Container port: 5432
+pgAdmin host port: 5050
+```
+
+The named PostgreSQL volume is:
+
+```text
+postgres_data
+```
+
+The same PostgreSQL instance is used for both relational data and vector data.
+
+Do not create a second vector database.
+
+Do not use:
+
+```bash
+Docker compose down -v
+```
+
+because it removes the named database volume.
+
+---
+
+## 28. Configuration
+
+Important environment variables include:
+
+```env
+POSTGRES_DB
+POSTGRES_USER
+POSTGRES_PASSWORD
+POSTGRES_HOST
+POSTGRES_PORT
+
+STORAGE_PATH
+MODEL_PATH
+DINOV2_MODEL_NAME
+T_SCORE_MODEL_NAME
+Z_SCORE_MODEL_NAME
+MODEL_METADATA_NAME
+
+RAG_DOCUMENTS_PATH
+EMBEDDING_MODEL
+RAG_TOP_K
+CHUNK_SIZE
+CHUNK_OVERLAP
+
+LLM_PROVIDER
+LLM_MODEL
+OPENROUTER_API_KEY
+```
+
+The OpenRouter API key is never stored in source control.
+
+---
+
+## 29. Testing and Acceptance
+
+### 29.1 V1 regression
+
+Required flow:
+
+```text
+Patient
+→ Analysis
+→ ML result
+→ Persistence
+→ Patient history
+```
+
+### 29.2 RAG verification
 
 Verify:
 
-- Navigation
-- Patient creation
-- Duplicate patient names
-- Image upload/preview
-- BMI auto-calculation
-- Male pregnancy disabling
-- Female pregnancy requirement
-- Loading state
-- Result rendering
-- Patient history
-- Delete confirmation
+- four approved PDFs available locally;
+- text extraction succeeds;
+- chunk creation succeeds;
+- metadata is attached;
+- 768-dimensional embeddings are stored;
+- pgvector retrieval works;
+- repeated unchanged ingestion is idempotent;
+- no patient data is in the RAG index.
 
-## End-to-end
+### 29.3 Clinical Support verification
 
-Complete one flow:
+Verify:
+
+- Clinical Support button/navigation;
+- saved analysis loading;
+- automatic query building;
+- 3–5 retrieved chunks;
+- OpenRouter request;
+- structured parser;
+- evidence-derived sources;
+- disclaimer;
+- retry/regenerate behavior.
+
+### 29.4 Frontend verification
+
+Verify:
+
+- all six routes load;
+- patient creation/deletion;
+- analysis history;
+- X-ray preview;
+- BMI calculation;
+- pregnancy behavior;
+- result rendering;
+- Clinical Support rendering;
+- responsive layouts.
+
+### 29.5 Security verification
+
+Verify that no:
 
 ```text
-Create patient
-→ Upload X-ray
-→ Enter clinical details
-→ Run analysis
-→ DINOv2 result
-→ T/Z results
-→ Save
-→ View patient history
-→ Open saved analysis
+.env
+API key
+patient image
+.pth
+.joblib
+RAG PDF
 ```
 
----
-
-# 28. UX requirements
-
-Keep the application modern, clean, and simple.
-
-Prioritize:
-
-- Clear form labels
-- Large readable result cards
-- Clear prediction/confidence
-- Clear T-score/Z-score presentation
-- Responsive layout
-- Consistent loading states
-- Clear error messages
-- Minimal unnecessary UI
-
-Do not add complex charts or dashboards unless they directly improve the current workflow.
+is committed to Git.
 
 ---
 
-# 29. V1 acceptance criteria
+## 30. Verified Final State
 
-V1 is complete only when all of the following work locally:
-
-### Environment
-
-- Docker Desktop works
-- PostgreSQL runs through Docker
-- pgAdmin connects to PostgreSQL
-- frontend starts locally
-- backend starts locally
-
-### Patients
-
-- Create patient
-- Generate unique patient ID
-- Duplicate names allowed
-- View patient
-- Delete patient
-
-### Analysis
-
-- Select/create patient
-- Upload knee X-ray
-- Preview image
-- Enter required clinical data
-- BMI auto-calculated
-- Backend recalculates BMI
-- Male pregnancy auto-set to 0 and disabled
-- Female pregnancy required
-- Run analysis
-
-### ML
-
-- DINOv2 model loads
-- Correct preprocessing applied
-- DINOv2 class/probabilities returned
-- Predicted class automatically passed into clinical models
-- T-score model returns estimate
-- Z-score model returns estimate
-- T/Z ranges displayed
-
-### Storage
-
-- X-ray saved to local storage
-- image path saved in PostgreSQL
-- analysis saved
-- multiple analyses per patient supported
-- history displayed
-- previous analyses preserved
-- delete works
-
-### Result
-
-- classification displayed
-- confidence displayed
-- class probabilities displayed
-- T-score estimate/range displayed
-- Z-score estimate/range displayed
-- patient inputs displayed
-- save/history actions work
-
----
-
-# 30. Future extension point — RAG/LLM
-
-Do not implement now.
-
-The architecture must leave clean extension points for:
+The latest project verification reported:
 
 ```text
+V1 regression                  PASS
+Clinical Support real flow    PASS
+RAG verification               PASS
+Security/privacy               PASS
+Parser tests                   5/5 PASS
+Frontend build                 PASS
+Frontend lint                  PASS with existing warnings
+Git diff check                  PASS
+```
+
+The verified environment also reported:
+
+```text
+5 retrieved chunks in the verified Clinical Support flow
+488 indexed RAG chunks
+No RAG PDFs tracked by Git
+No sensitive patient/file values sent to OpenRouter
+```
+
+These are implementation verification results, not clinical validation metrics.
+
+---
+
+## 31. Known Limitations
+
+### 31.1 LlamaIndex runtime discrepancy
+
+LlamaIndex is specified in the original Phase 2 requirements and its dependencies are present, but the active retrieval implementation uses direct SQLAlchemy + pgvector similarity search.
+
+### 31.2 No XAI runtime
+
+The current system does not generate image heatmaps or explain DINOv2 predictions visually.
+
+### 31.3 No validated multimodal fusion classifier
+
+The research concept is broader than the deployed classifier. The current application does not contain a separately trained patient-only classification branch followed by validated probability-level fusion.
+
+### 31.4 Model-estimated T/Z values
+
+T-score and Z-score are project model estimates, not direct densitometry measurements.
+
+### 31.5 External LLM variability
+
+`openrouter/free` may route to different upstream models and can return model-dependent response structures. Parser hardening reduces failure impact but does not control upstream behavior.
+
+### 31.6 Research/local deployment
+
+The current application is a local research/development system and is not presented as production clinical infrastructure.
+
+---
+
+## 32. Future Research Extensions
+
+Potential future work includes:
+
+- patient-data classification branch;
+- validated probability-level multimodal fusion;
+- explainable AI / Grad-CAM or other validated visual explanations;
+- stronger quantitative retrieval evaluation;
+- expert review protocols for Clinical Support;
+- external clinical validation;
+- governed expansion of the evidence corpus;
+- optional production deployment controls.
+
+These are future extensions and are not part of the current implemented product.
+
+---
+
+## 33. Final Viva Explanation
+
+> A knee X-ray is uploaded through the React application together with the required clinical information. FastAPI validates the request and runs the DINOv2 image classifier, which produces a three-class screening result with class probabilities and confidence. The predicted class is automatically inserted into the fixed V1 clinical feature vector used by the T-score Random Forest and Z-score Gradient Boosting models. The system calculates empirical T/Z prediction-error ranges, saves the analysis and local image reference, and displays the result.
+>
+> For Clinical Support, the user explicitly opens the feature for a saved analysis. The backend loads the analysis and clinical context, builds a concise evidence query, creates a BGE embedding, and performs cosine-similarity retrieval against the approved medical corpus stored in PostgreSQL/pgvector. Three to five relevant evidence chunks are combined with permitted case context in a grounded OpenRouter prompt. The backend parses the returned structured response, derives source information from retrieved metadata, and sends the result to the Clinical Support UI with the grounding note and exact medical-safety disclaimer. The system supports screening and evidence review; it does not replace professional diagnosis or treatment decisions.
+
+---
+
+## 34. Exact Medical Disclaimer
+
+**AI-assisted guidance for informational purposes. This does not replace a doctor's diagnosis or treatment decision. Discuss medical decisions with your doctor.**
+
+---
+
+## 35. Final Product Definition
+
+The completed system is an AI-assisted osteoporosis screening application that combines:
+
+```text
+Knee X-ray
+   ↓
+DINOv2 classification
+   ↓
+V1 clinical-model estimation
+   ↓
 Saved analysis
-      ↓
-Case context
-      ↓
-RAG retrieval from trusted medical knowledge
-      ↓
-LLM synthesis
-      ↓
-Evidence-based clinical decision-support report
+   ↓
+BGE evidence retrieval
+   ↓
+PostgreSQL/pgvector
+   ↓
+Grounded OpenRouter synthesis
+   ↓
+Structured Clinical Support
+   ↓
+Human review
 ```
 
-Do not create placeholder RAG/LLM features that do nothing. Keep only clean service/API boundaries that make the future addition straightforward.
-
----
-
-# 31. Devin implementation instructions
-
-1. Start by inspecting the current contents of the repository.
-2. Work directly in `Knee-Osteoporosis-AI`.
-3. Do not create a new repository.
-4. Do not retrain any ML model.
-5. Do not replace DINOv2 with another model.
-6. The user will copy the trained model files into `backend/models/`.
-7. Provide a clear model-folder README or documentation explaining exactly where each supplied model file must be placed.
-8. Build PostgreSQL and pgAdmin with Docker Compose.
-9. Do not require native PostgreSQL Server installation on Windows.
-10. Keep secrets in `.env` and provide `.env.example`.
-11. Implement backend inference in Python/FastAPI.
-12. Keep model inference out of React.
-13. Implement patient + analysis relational storage.
-14. Support many analyses for one patient.
-15. Store image files locally and image paths in PostgreSQL.
-16. Implement automatic BMI calculation in the UI and authoritative BMI recalculation in the backend.
-17. Automatically disable pregnancy input for male and set it to 0.
-18. Require a pregnancy value for female.
-19. Never let the user manually choose the DINOv2 class used by Model 2.
-20. Pass DINOv2 class ID automatically into Model 2.
-21. Preserve the model's expected feature order.
-22. Display model-estimated T-score/Z-score and their empirical ranges clearly.
-23. Do not call the ranges clinical confidence intervals.
-24. Keep V1 limited to analysis + result display + storage.
-25. Do not implement RAG, vector DB, or LLM yet.
-26. Add tests for the core workflow.
-27. Update README with exact setup and run commands.
-28. Keep the implementation simple enough for local development and debugging.
-29. Avoid unnecessary dependencies.
-30. At the end, report what was implemented, what commands to run, and what remains for the future RAG phase.
-
----
-
-# 32. Final target architecture
+The core design deliberately keeps four responsibilities separate:
 
 ```text
-                    React Frontend
-                           │
-                           │ HTTP / JSON / Multipart
-                           ↓
-                    FastAPI Backend
-                           │
-             ┌─────────────┼─────────────┐
-             │             │             │
-             ↓             ↓             ↓
-        PostgreSQL    ML Inference   Local Storage
-        (Docker)         │          (X-ray images)
-             │           │
-             │      ┌────┴─────┐
-             │      │          │
-             │   DINOv2    Clinical Models
-             │               │
-             │         ┌─────┴─────┐
-             │         │           │
-             │      T-score      Z-score
-             │         │           │
-             └─────────┴───────────┘
-                       ↓
-                 Analysis Result
-                       ↓
-                 Patient History
+DINOv2              → X-ray classification
+Random Forest       → T-score estimation
+Gradient Boosting   → Z-score estimation
+BGE + pgvector      → evidence retrieval
+OpenRouter          → Clinical Support synthesis
+React               → user interface
 ```
 
-This is the complete V1 target.
-
-**Stop development at the result/history stage. Do not proceed into RAG/LLM implementation unless explicitly instructed in a later phase.**
-
-## 45. Devin interaction, setup checks, and Git initialization
-
-### Ask questions before making irreversible architectural decisions
-
-Devin must not silently guess when an important implementation detail is ambiguous or when a required local dependency/configuration is missing.
-
-Before implementation, inspect the repository and `PRD.md`, then ask me concise questions for any blocking ambiguity. In particular, ask me when:
-- an existing repository component conflicts with this PRD;
-- an external service, API, credential, or package choice is required but not specified;
-- the current environment is missing a required tool or extension;
-- a setup decision could materially affect the architecture or data/model compatibility.
-
-Do not ask unnecessary questions for decisions already specified in this PRD. Prefer sensible defaults when the decision is low-risk and reversible, and state what you selected.
-
-### Tell me what I need to install or configure
-
-If implementation requires a missing VS Code extension, Python package, Node package, Docker/WSL component, PostgreSQL/pgAdmin configuration, environment variable, or other local setup, tell me clearly:
-1. what is missing;
-2. why it is required;
-3. the exact installation/setup step or command;
-4. how to verify it.
-
-Do not assume that I have installed project-specific extensions or dependencies just because VS Code is installed.
-
-The base tools I already have are:
-- VS Code
-- Devin
-- Git
-- Python
-- Node.js + npm
-- Docker Desktop
-
-Docker has already been installed and verified locally. PostgreSQL Server will NOT be installed directly on Windows; PostgreSQL and pgAdmin should run through Docker as specified above.
-
-### Git repository initialization
-
-This project must be initialized and developed as a Git repository in the existing project/repository location.
-
-Devin must:
-- inspect whether Git is already initialized;
-- initialize Git with `git init` if needed;
-- connect the local repository to the existing GitHub repository when appropriate:
-  `https://github.com/Santhoshkumar0913/Knee-Osteoporosis-AI.git`;
-- create a suitable `.gitignore` before committing generated/local files;
-- make an initial baseline commit after the project setup is valid, unless the repository already contains appropriate commits and history;
-- never overwrite or discard existing Git history without asking me first;
-- never force-push or perform destructive Git operations without asking me first.
-
-### Model files and Git safety
-
-I will manually copy the trained ML model files into the backend model directory after Devin creates the folder structure.
-
-Expected files:
-- `dinov2_experiment2_best.pth`
-- `t_score_random_forest.joblib`
-- `z_score_gradient_boosting.joblib`
-- `model_metadata.json`
-
-By default, the large trained model/checkpoint files must NOT be committed to GitHub.
-
-The `.gitignore` must explicitly protect large model artifacts, at minimum:
-- `*.pth`
-- `*.pt`
-- `*.ckpt`
-
-Also ignore other generated/local model artifacts where appropriate, while NOT ignoring `model_metadata.json` unless there is a specific reason.
-
-After creating `backend/models/`, Devin must leave a clear README or placeholder/instruction file there explaining that I need to manually copy the four trained files into that folder.
-
-Do not upload, commit, or push the model weights/checkpoints to GitHub unless I explicitly request it.
-
-### Repository safety
-
-Before modifying files, Devin must inspect the existing repository state with Git and the filesystem.
-Do not delete existing project files simply to create a cleaner structure.
-If an existing implementation can be reused safely, prefer adapting it.
-If a conflict requires removing or replacing an existing component, explain the conflict before making a destructive change.
+The human user remains responsible for interpretation and medical decisions.
