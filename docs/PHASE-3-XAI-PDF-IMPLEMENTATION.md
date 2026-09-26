@@ -31,11 +31,13 @@ Phase 3 adds:
 6. PDF Clinical Support report generation.
 7. PDF report download from the Clinical Support page.
 
-### Phase 3 status at the start of this document
+### Current Phase 3 status
 
 ```text
-Original saved X-ray display    NOT IMPLEMENTED
-Grad-CAM                        NOT IMPLEMENTED
+Original saved X-ray API        PHASE 3D IMPLEMENTED
+Original X-ray UI display       NOT IMPLEMENTED
+Grad-CAM prototype              IMPLEMENTED; research only
+Grad-CAM user-facing explanation NOT VALIDATED / NOT APPROVED
 X-ray + heatmap visualization  NOT IMPLEMENTED
 XAI API                        NOT IMPLEMENTED
 Clinical Support XAI UI        NOT IMPLEMENTED
@@ -43,7 +45,19 @@ PDF generation                 NOT IMPLEMENTED
 PDF download                   NOT IMPLEMENTED
 ```
 
-Do not describe these features as already implemented.
+### Current implementation status
+
+Phase 3A runtime verification and Phase 3B one-image Grad-CAM prototype are
+complete. Phase 3C was completed as research validation. It found inconsistent
+Grad-CAM attribution to letterbox padding, including disproportionate padding
+attribution on some samples and measurable prediction sensitivity to padding
+in at least one sample. The current Grad-CAM output is therefore not a
+validated user-facing explanation and must not be exposed in the product UI or
+described as clinical evidence. Keep the prototype intact for future research
+and validation.
+
+Phase 3D adds only the original saved X-ray API. It does not expose Grad-CAM or
+add frontend or PDF integration.
 
 ---
 
@@ -168,19 +182,20 @@ Checkpoint:
 backend/models/dinov2_experiment2_best.pth
 ```
 
-### Important verification status
+### Verified runtime structure
 
-The exact runtime timm module structure must be verified before implementing
-Grad-CAM.
-
-The earlier inspection environment did not have `timm` installed, so these
-details must NOT be assumed:
+Runtime inspection using the existing model and checkpoint verified:
 
 ```text
-exact target layer
-exact token count
-special/register token count
-exact activation shape
+Backbone: timm VisionTransformer, 12 blocks, embedding dimension 384
+Target layer: backbone.blocks[11].norm1
+Activation shape: [1, 1370, 384]
+Total tokens: 1370
+Patch tokens: 1369
+Class tokens: 1
+Register tokens: 0
+Patch grid: 37 × 37
+Reshape: remove class token → [1, 1369, 384] → [1, 37, 37, 384] → [1, 384, 37, 37]
 ```
 
 ---
@@ -430,7 +445,7 @@ Normal prediction behavior must remain unaffected.
 
 ---
 
-# 11. Phase 3C — Original X-ray Endpoint
+# 11. Phase 3D — Original X-ray Endpoint
 
 Add a controlled endpoint following existing API conventions.
 
@@ -456,7 +471,7 @@ Do not expose arbitrary storage files.
 
 ---
 
-# 12. Phase 3D — XAI Endpoint
+# 12. Phase 3E — XAI Endpoint
 
 Suggested:
 
@@ -533,7 +548,7 @@ anatomical pathology map.
 
 ---
 
-# 15. Phase 3E — Analysis Result UI
+# 15. Phase 3F — Analysis Result UI
 
 Update the existing:
 
@@ -585,7 +600,7 @@ New Analysis
 
 ---
 
-# 16. Phase 3F — Clinical Support UI
+# 16. Phase 3G — Clinical Support UI
 
 Update:
 
@@ -664,7 +679,7 @@ the model-estimated T/Z values.
 
 ---
 
-# 18. Phase 3G — PDF Generation
+# 18. Phase 3H — PDF Generation
 
 Create a dedicated PDF service, for example:
 
@@ -914,6 +929,16 @@ Test:
 - unsupported image;
 - traversal rejection.
 
+## Grad-CAM research limitation
+
+Phase 3C validation found inconsistent attribution to the artificial
+letterbox padding. Some samples assigned a disproportionate share of
+attribution to padding, and a padding sensitivity experiment measurably
+changed the prediction for at least one sample. Preserve full attribution for
+research inspection; do not silently mask padding or expose the current
+Grad-CAM as a validated user-facing explanation. This finding is not a claim
+of clinical validity.
+
 ## PDF
 
 Test:
@@ -1093,12 +1118,12 @@ Do not add emojis, prefixes, or unrelated commit information.
 # 30. Definition of Done
 
 ```text
-[ ] Runtime DINOv2 structure verified
-[ ] Exact Grad-CAM target verified
-[ ] Exact token reshape verified
-[ ] Grad-CAM prototype works
+[x] Runtime DINOv2 structure verified
+[x] Exact Grad-CAM target verified
+[x] Exact token reshape verified
+[x] Grad-CAM prototype works (research only; not approved for user-facing use)
 [ ] Grad-CAM visually validated
-[ ] Original X-ray endpoint works
+[x] Original X-ray endpoint works
 [ ] Original X-ray shown in Analysis Result
 [ ] Grad-CAM shown in Analysis Result
 [ ] X-ray and Grad-CAM shown in Clinical Support
