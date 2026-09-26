@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image
 import numpy as np
 from typing import Tuple, Dict
+import threading
 from app.core.config import settings
 import logging
 
@@ -80,6 +81,9 @@ class DINOv2Model:
         self.model = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.class_names = {1: "Normal", 2: "Osteopenia", 3: "Osteoporosis"}
+        # Prediction and Grad-CAM share this model. Keep the forward pass
+        # serialized while a temporary Grad-CAM hook is installed.
+        self._forward_lock = threading.Lock()
         self._load_model()
     
     def _load_model(self):
@@ -135,10 +139,11 @@ class DINOv2Model:
             image_tensor = self.preprocess_image(image)
             
             # Run inference
-            with torch.no_grad():
-                outputs = self.model(image_tensor)
-                probabilities = torch.nn.functional.softmax(outputs, dim=1)
-                confidence, predicted_class = torch.max(probabilities, 1)
+            with self._forward_lock:
+                with torch.no_grad():
+                    outputs = self.model(image_tensor)
+                    probabilities = torch.nn.functional.softmax(outputs, dim=1)
+                    confidence, predicted_class = torch.max(probabilities, 1)
             
             # Convert to numpy for easier handling
             predicted_class = predicted_class.item() + 1  # Convert 0-indexed to 1-indexed
@@ -161,6 +166,83 @@ class DINOv2Model:
             
         except Exception as e:
             logger.error(f"DINOv2 inference failed: {str(e)}")
+            raise
+
+    def generate_gradcam(self, image: Image.Image) -> Dict:
+        """Generate a Grad-CAM map for the model's predicted class.
+
+        This one-image prototype uses the same preprocessing and checkpoint as
+        ``predict``. Activation and gradient references remain local to this
+        call; the shared forward lock prevents predictions or another CAM
+        request from running while the temporary hook is active.
+        """
+        try:
+            with self._forward_lock:
+                image_tensor = self.preprocess_image(image)
+                target_layer = self.model.backbone.blocks[-1].norm1
+                captured = {}
+
+                def capture_activation(_module, _inputs, output):
+                    captured["activation"] = output
+
+                hook_handle = target_layer.register_forward_hook(capture_activation)
+                try:
+                    with torch.enable_grad():
+                        logits = self.model(image_tensor)
+                        predicted_index = int(logits.argmax(dim=1).item())
+                        activation = captured.get("activation")
+                        if activation is None:
+                            raise RuntimeError("Grad-CAM target layer did not produce an activation")
+
+                        gradients = torch.autograd.grad(
+                            logits[0, predicted_index], activation, retain_graph=False
+                        )[0]
+
+                    grid_height, grid_width = self.model.backbone.patch_embed.grid_size
+                    prefix_tokens = self.model.backbone.num_prefix_tokens
+                    patch_activations = activation[:, prefix_tokens:, :]
+                    patch_gradients = gradients[:, prefix_tokens:, :]
+                    expected_patch_tokens = grid_height * grid_width
+                    if patch_activations.shape[1] != expected_patch_tokens:
+                        raise RuntimeError(
+                            "Unexpected DINOv2 patch token count: "
+                            f"got {patch_activations.shape[1]}, expected {expected_patch_tokens}"
+                        )
+
+                    batch_size, _, feature_dim = patch_activations.shape
+                    activations = patch_activations.reshape(
+                        batch_size, grid_height, grid_width, feature_dim
+                    ).permute(0, 3, 1, 2)
+                    gradients = patch_gradients.reshape(
+                        batch_size, grid_height, grid_width, feature_dim
+                    ).permute(0, 3, 1, 2)
+
+                    channel_weights = gradients.mean(dim=(2, 3), keepdim=True)
+                    cam = torch.relu((channel_weights * activations).sum(dim=1, keepdim=True))
+                    cam = torch.nn.functional.interpolate(
+                        cam,
+                        size=(image_tensor.shape[-2], image_tensor.shape[-1]),
+                        mode="bilinear",
+                        align_corners=False,
+                    )
+                    cam = cam[0, 0]
+                    cam_min = cam.min()
+                    cam_max = cam.max()
+                    cam = (cam - cam_min) / (cam_max - cam_min).clamp_min(1e-12)
+
+                    probabilities = torch.softmax(logits.detach(), dim=1)
+                    confidence = float(probabilities[0, predicted_index].item())
+                    predicted_class = predicted_index + 1
+                    return {
+                        "predicted_class": predicted_class,
+                        "predicted_diagnosis": self.class_names.get(predicted_class, "Unknown"),
+                        "confidence": confidence,
+                        "heatmap": cam.detach().cpu().numpy().astype(np.float32),
+                    }
+                finally:
+                    hook_handle.remove()
+        except Exception as e:
+            logger.error(f"DINOv2 Grad-CAM failed: {str(e)}")
             raise
 
 
