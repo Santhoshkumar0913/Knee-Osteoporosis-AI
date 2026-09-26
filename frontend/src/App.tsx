@@ -5,6 +5,7 @@ import PatientDetails from './pages/PatientDetails/PatientDetails';
 import NewAnalysis from './pages/NewAnalysis/NewAnalysis';
 import AnalysisResult from './pages/AnalysisResult/AnalysisResult';
 import ClinicalSupport from './pages/ClinicalSupport/ClinicalSupport';
+import AppShell from './components/AppShell';
 import './App.css';
 
 function App() {
@@ -12,12 +13,14 @@ function App() {
     <Router>
       <div className="app">
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/patients" element={<Patients />} />
-          <Route path="/patients/:patientId" element={<PatientDetails />} />
-          <Route path="/patients/:patientId/analysis/new" element={<NewAnalysis />} />
-          <Route path="/analyses/:analysisId" element={<AnalysisResult />} />
-          <Route path="/analyses/:analysisId/clinical-support" element={<ClinicalSupport />} />
+          <Route element={<AppShell />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/patients" element={<Patients />} />
+            <Route path="/patients/:patientId" element={<PatientDetails />} />
+            <Route path="/patients/:patientId/analysis/new" element={<NewAnalysis />} />
+            <Route path="/analyses/:analysisId" element={<AnalysisResult />} />
+            <Route path="/analyses/:analysisId/clinical-support" element={<ClinicalSupport />} />
+          </Route>
         </Routes>
       </div>
     </Router>

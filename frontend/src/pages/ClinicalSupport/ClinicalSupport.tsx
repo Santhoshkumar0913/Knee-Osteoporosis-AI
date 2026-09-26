@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { getAnalysis, getClinicalSupport, getPatient } from '../../services/api';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { getAnalysis, getAnalysisImageUrl, getClinicalSupport, getPatient } from '../../services/api';
 import type { Analysis, ClinicalSupportResponse, Patient } from '../../types';
+import { formatDateOnly } from '../../utils/date';
 import './ClinicalSupport.css';
 
 const ClinicalSupport = () => {
@@ -13,31 +14,32 @@ const ClinicalSupport = () => {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
-    if (analysisId) {
-      loadAnalysis();
-    }
-  }, [analysisId]);
+    if (!analysisId) return;
+    let active = true;
+    getAnalysis(parseInt(analysisId))
+      .then(async (data) => {
+        if (!active) return;
+        setAnalysis(data);
+        setImageError(false);
+        const patientData = await getPatient(data.patient_id);
+        if (!active) return;
+        setPatient(patientData);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError('Failed to load analysis');
+        console.error('Error loading analysis:', err);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
 
-  const loadAnalysis = async () => {
-    try {
-      setLoading(true);
-      const data = await getAnalysis(parseInt(analysisId!));
-      setAnalysis(data);
-      
-      // Load patient data to get patient name
-      const patientData = await getPatient(data.patient_id);
-      setPatient(patientData);
-      
-      setError(null);
-    } catch (err) {
-      setError('Failed to load analysis');
-      console.error('Error loading analysis:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => { active = false; };
+  }, [analysisId]);
 
   const handleGenerateSupport = async () => {
     if (!analysisId) return;
@@ -56,20 +58,31 @@ const ClinicalSupport = () => {
   };
 
   if (loading) {
-    return <div className="loading">Loading analysis...</div>;
+    return <div className="loading page-container">Loading analysis...</div>;
   }
 
   if (!analysis) {
-    return <div className="error">Analysis not found</div>;
+    return <div className="error page-container">Analysis not found</div>;
   }
 
   return (
-    <div className="clinical-support-container">
+    <div className="clinical-support-container page-container">
       <div className="breadcrumb">
-        <span>Analysis ID: {analysisId}</span>
+        <Link to="/patients">Patients</Link>
+        <span aria-hidden="true">›</span>
+        {patient && <><Link to={`/patients/${patient.id}`}>{patient.patient_code}</Link><span aria-hidden="true">›</span></>}
+        <Link to={`/analyses/${analysisId}`}>Analysis</Link>
+        <span aria-hidden="true">›</span>
+        <span>Clinical Support</span>
       </div>
 
-      <h1>Clinical Support</h1>
+      <div className="page-heading clinical-page-heading">
+        <div>
+          <h1>Clinical Support</h1>
+          <p>Evidence-grounded information based on this saved analysis.</p>
+        </div>
+        <Link to={`/analyses/${analysisId}`} className="button button-secondary">Back to Analysis</Link>
+      </div>
 
       {error && (
         <div className="error-section">
@@ -84,51 +97,69 @@ const ClinicalSupport = () => {
         </div>
       )}
 
-      <div className="analysis-summary">
+      <section className="analysis-summary xray-summary surface-card">
+        <h2>Original X-ray</h2>
+        {imageError ? (
+          <p className="xray-error" role="status">The saved X-ray image could not be loaded.</p>
+        ) : (
+          <img
+            className="clinical-xray-image"
+            src={getAnalysisImageUrl(analysis.id)}
+            alt="Original knee X-ray uploaded for this analysis"
+            onError={() => setImageError(true)}
+          />
+        )}
+      </section>
+
+      <section className="analysis-summary patient-summary surface-card">
         <h2>Patient Information</h2>
         <div className="summary-grid">
           <div className="summary-item">
-            <span className="label">Patient Name:</span>
-            <span className="value">{patient?.name || 'Unknown'}</span>
+            <span className="label">Patient Code</span>
+            <span className="value">{patient?.patient_code || '—'}</span>
           </div>
           <div className="summary-item">
-            <span className="label">Patient ID:</span>
-            <span className="value">{analysis.patient_id}</span>
+            <span className="label">Name</span>
+            <span className="value">{patient?.name || '—'}</span>
+          </div>
+          <div className="summary-item">
+            <span className="label">Analysis Date</span>
+            <span className="value">{formatDateOnly(analysis.created_at)}</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="analysis-summary">
+      <section className="analysis-summary prediction-summary surface-card">
         <h2>AI Prediction</h2>
         <div className="summary-grid">
           <div className="summary-item">
-            <span className="label">Predicted Class:</span>
-            <span className="value">{analysis.predicted_diagnosis}</span>
+            <span className="label">Predicted Class</span>
+            <span className={`value status-text status-${analysis.predicted_diagnosis.toLowerCase()}`}>{analysis.predicted_diagnosis}</span>
           </div>
           <div className="summary-item">
-            <span className="label">Confidence:</span>
+            <span className="label">Confidence</span>
             <span className="value">{(analysis.confidence * 100).toFixed(1)}%</span>
           </div>
           <div className="summary-item">
-            <span className="label">Normal Probability:</span>
+            <span className="label">Normal</span>
             <span className="value">{(analysis.normal_probability * 100).toFixed(1)}%</span>
           </div>
           <div className="summary-item">
-            <span className="label">Osteopenia Probability:</span>
+            <span className="label">Osteopenia</span>
             <span className="value">{(analysis.osteopenia_probability * 100).toFixed(1)}%</span>
           </div>
           <div className="summary-item">
-            <span className="label">Osteoporosis Probability:</span>
+            <span className="label">Osteoporosis</span>
             <span className="value">{(analysis.osteoporosis_probability * 100).toFixed(1)}%</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="analysis-summary">
+      <section className="analysis-summary bone-summary surface-card">
         <h2>Bone Scores</h2>
         <div className="summary-grid">
           <div className="summary-item">
-            <span className="label">T-score:</span>
+            <span className="label">Model-estimated T-score</span>
             <span className="value">{analysis.t_score.toFixed(2)}</span>
           </div>
           <div className="summary-item">
@@ -136,7 +167,7 @@ const ClinicalSupport = () => {
             <span className="value">{analysis.t_score_lower.toFixed(2)} to {analysis.t_score_upper.toFixed(2)}</span>
           </div>
           <div className="summary-item">
-            <span className="label">Z-score:</span>
+            <span className="label">Model-estimated Z-score</span>
             <span className="value">{analysis.z_score.toFixed(2)}</span>
           </div>
           <div className="summary-item">
@@ -144,9 +175,9 @@ const ClinicalSupport = () => {
             <span className="value">{analysis.z_score_lower.toFixed(2)} to {analysis.z_score_upper.toFixed(2)}</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="analysis-summary">
+      <section className="analysis-summary context-summary surface-card">
         <h2>Clinical Context</h2>
         <div className="summary-grid">
           <div className="summary-item">
@@ -159,7 +190,7 @@ const ClinicalSupport = () => {
           </div>
           <div className="summary-item">
             <span className="label">Height:</span>
-            <span className="value">{analysis.height} cm</span>
+            <span className="value">{analysis.height.toFixed(2)} m</span>
           </div>
           <div className="summary-item">
             <span className="label">Weight:</span>
@@ -179,7 +210,7 @@ const ClinicalSupport = () => {
           </div>
           <div className="summary-item">
             <span className="label">Menopausal Status:</span>
-            <span className="value">{analysis.menopausal_status || 'Not specified'}</span>
+            <span className="value">{analysis.gender.toLowerCase() === 'male' ? 'Not applicable' : analysis.menopausal_status || 'Not specified'}</span>
           </div>
           <div className="summary-item">
             <span className="label">Smoking:</span>
@@ -198,16 +229,16 @@ const ClinicalSupport = () => {
             <span className="value">{analysis.long_term_steroid_use || 'Not specified'}</span>
           </div>
         </div>
-      </div>
+      </section>
 
       {!clinicalSupport ? (
-        <div className="generate-section">
+        <div className="generate-section surface-card">
           <p>
             Get evidence-based clinical support information based on your analysis results
             and medical literature.
           </p>
           <button
-            className="generate-button"
+            className="button button-primary generate-button"
             onClick={handleGenerateSupport}
             disabled={generating}
           >
@@ -215,7 +246,7 @@ const ClinicalSupport = () => {
           </button>
         </div>
       ) : (
-        <div className="clinical-support-content">
+        <div className="clinical-support-content surface-card">
           <div className="support-section">
             <h3>Explanation</h3>
             <p>{clinicalSupport.explanation}</p>
@@ -281,12 +312,12 @@ const ClinicalSupport = () => {
           </div>
 
           <div className="disclaimer">
-            <p>AI-assisted guidance for informational purposes. This does not replace a doctor's diagnosis or treatment decision. Discuss medical decisions with your doctor.</p>
+            <p>{clinicalSupport.disclaimer}</p>
           </div>
 
           <div className="support-actions">
             <button
-              className="regenerate-button"
+              className="button button-secondary regenerate-button"
               onClick={handleGenerateSupport}
               disabled={generating}
             >
@@ -298,7 +329,7 @@ const ClinicalSupport = () => {
 
       <div className="page-actions">
         <button
-          className="back-button"
+          className="button button-secondary back-button"
           onClick={() => navigate(`/analyses/${analysisId}`)}
         >
           Back to Analysis Results

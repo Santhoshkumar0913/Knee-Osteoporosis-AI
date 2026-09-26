@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getPatient, getPatientAnalyses, deletePatient, deleteAnalysis } from '../../services/api';
 import type { Patient, AnalysisListItem } from '../../types';
+import { formatDateOnly } from '../../utils/date';
 import './PatientDetails.css';
 
 const PatientDetails = () => {
@@ -12,15 +13,9 @@ const PatientDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (patientId) {
-      loadPatientData();
-    }
-  }, [patientId]);
-
-  const loadPatientData = async () => {
+  const loadPatientData = useCallback(async () => {
+    if (!patientId) return;
     try {
-      setLoading(true);
       const [patientData, analysesData] = await Promise.all([
         getPatient(parseInt(patientId!)),
         getPatientAnalyses(parseInt(patientId!))
@@ -34,7 +29,30 @@ const PatientDetails = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [patientId]);
+
+  useEffect(() => {
+    if (!patientId) return;
+    let active = true;
+    const parsedPatientId = parseInt(patientId);
+    Promise.all([getPatient(parsedPatientId), getPatientAnalyses(parsedPatientId)])
+      .then(([patientData, analysesData]) => {
+        if (!active) return;
+        setPatient(patientData);
+        setAnalyses(analysesData);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError('Failed to load patient data');
+        console.error('Error loading patient data:', err);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [patientId]);
 
   const handleDeletePatient = async () => {
     if (!patient) return;
@@ -59,7 +77,7 @@ const PatientDetails = () => {
 
     try {
       await deleteAnalysis(analysisId);
-      loadPatientData();
+      await loadPatientData();
     } catch (err) {
       setError('Failed to delete analysis');
       console.error('Error deleting analysis:', err);
@@ -75,29 +93,27 @@ const PatientDetails = () => {
   }
 
   return (
-    <div className="patient-details-container">
+    <div className="patient-details-container page-container">
       <div className="breadcrumb">
         <Link to="/patients">Patients</Link>
-        <span> / </span>
+        <span aria-hidden="true">›</span>
         <span>{patient.patient_code}</span>
       </div>
 
-      <div className="patient-header">
+      <div className="patient-header page-heading">
         <div className="patient-info">
-          <h1>{patient.patient_code} — {patient.name}</h1>
-          <p className="patient-meta">
-            Created: {new Date(patient.created_at).toLocaleDateString()}
-          </p>
+          <h1>Patient Details</h1>
+          <p className="patient-meta">{patient.patient_code} <span aria-hidden="true">·</span> {patient.name}</p>
         </div>
         <div className="patient-actions">
           <Link 
             to={`/patients/${patient.id}/analysis/new`}
-            className="action-button primary-button"
+            className="button button-primary"
           >
             + New Analysis
           </Link>
           <button 
-            className="action-button danger-button"
+            className="button button-danger"
             onClick={handleDeletePatient}
           >
             Delete Patient
@@ -107,8 +123,24 @@ const PatientDetails = () => {
 
       {error && <div className="error-message">{error}</div>}
 
-      <div className="analyses-section">
-        <h2>Analysis History</h2>
+      <section className="patient-information surface-card" aria-labelledby="patient-information-title">
+        <h2 id="patient-information-title">Patient Information</h2>
+        <dl className="patient-information-grid">
+          <div><dt>Patient ID</dt><dd>{patient.id}</dd></div>
+          <div><dt>Patient Code</dt><dd>{patient.patient_code}</dd></div>
+          <div><dt>Name</dt><dd>{patient.name}</dd></div>
+          <div><dt>Created Date</dt><dd>{formatDateOnly(patient.created_at)}</dd></div>
+          <div><dt>Total Analyses</dt><dd>{patient.analyses_count ?? analyses.length}</dd></div>
+        </dl>
+      </section>
+
+      <section className="analyses-section surface-card" aria-labelledby="analysis-history-title">
+        <div className="section-heading">
+          <div>
+            <h2 id="analysis-history-title">Analysis History</h2>
+            <p>Previous saved analyses for this patient.</p>
+          </div>
+        </div>
         
         {analyses.length === 0 ? (
           <div className="empty-state">
@@ -120,7 +152,7 @@ const PatientDetails = () => {
               <thead>
                 <tr>
                   <th>Date</th>
-                  <th>Diagnosis</th>
+                  <th>Prediction</th>
                   <th>Confidence</th>
                   <th>T-score</th>
                   <th>Z-score</th>
@@ -130,24 +162,26 @@ const PatientDetails = () => {
               <tbody>
                 {analyses.map((analysis) => (
                   <tr key={analysis.id}>
-                    <td>{new Date(analysis.created_at).toLocaleDateString()}</td>
-                    <td>{analysis.predicted_diagnosis}</td>
+                    <td>{formatDateOnly(analysis.created_at)}</td>
+                    <td><span className={`status-pill status-${analysis.predicted_diagnosis.toLowerCase()}`}>{analysis.predicted_diagnosis}</span></td>
                     <td>{(analysis.confidence * 100).toFixed(2)}%</td>
                     <td>{analysis.t_score.toFixed(2)}</td>
                     <td>{analysis.z_score.toFixed(2)}</td>
                     <td>
+                      <div className="history-actions">
                       <Link 
                         to={`/analyses/${analysis.id}`}
-                        className="action-button view-button"
+                        className="button button-secondary button-small"
                       >
                         View
                       </Link>
                       <button 
-                        className="action-button delete-button"
+                        className="button button-danger button-small"
                         onClick={() => handleDeleteAnalysis(analysis.id)}
                       >
                         Delete
                       </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -155,7 +189,7 @@ const PatientDetails = () => {
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 };

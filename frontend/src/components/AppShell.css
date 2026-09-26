@@ -1,0 +1,165 @@
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  position: fixed;
+  z-index: 30;
+  inset: 0 auto 0 0;
+  display: flex;
+  width: 248px;
+  flex-direction: column;
+  padding: 24px 16px;
+  color: #e7f0f8;
+  background: linear-gradient(180deg, #102d45 0%, #0c263c 100%);
+  box-shadow: 8px 0 26px rgba(12, 38, 60, 0.1);
+}
+
+.brand {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 11px;
+  padding: 0 8px;
+  color: #fff;
+  font-size: 0.96rem;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 11px;
+  color: #fff;
+  background: #1479c9;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.primary-navigation {
+  display: grid;
+  gap: 7px;
+  margin-top: 38px;
+}
+
+.navigation-link {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 13px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  color: #d4e0eb;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.94rem;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.navigation-link:hover,
+.navigation-link.is-active {
+  color: #fff;
+  background: #1375c7;
+}
+
+.navigation-icon {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.7;
+}
+
+.app-main {
+  min-width: 0;
+  min-height: 100vh;
+  margin-left: 248px;
+}
+
+.mobile-header,
+.navigation-backdrop {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .app-main {
+    margin-left: 0;
+    padding-top: 64px;
+  }
+
+  .mobile-header {
+    position: fixed;
+    z-index: 40;
+    inset: 0 0 auto;
+    display: flex;
+    height: 64px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid #dce6ed;
+    background: #fff;
+  }
+
+  .brand-compact {
+    padding: 0;
+    color: #15334c;
+    font-size: 0.88rem;
+  }
+
+  .menu-toggle {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    align-content: center;
+    justify-items: center;
+    gap: 5px;
+    border: 1px solid #d8e3ea;
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .menu-toggle span {
+    width: 18px;
+    height: 2px;
+    border-radius: 2px;
+    background: #17354c;
+  }
+
+  .app-sidebar {
+    z-index: 50;
+    width: min(280px, 84vw);
+    padding-top: 82px;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    visibility: hidden;
+  }
+
+  .app-sidebar.is-open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .navigation-backdrop {
+    position: fixed;
+    z-index: 45;
+    inset: 64px 0 0;
+    display: block;
+    border: 0;
+    background: rgba(10, 30, 46, 0.45);
+  }
+}

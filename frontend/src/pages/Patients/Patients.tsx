@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getPatients, createPatient, deletePatient } from '../../services/api';
 import type { Patient } from '../../types';
+import { formatDateOnly } from '../../utils/date';
 import './Patients.css';
 
 const Patients = () => {
@@ -12,13 +13,8 @@ const Patients = () => {
   const [newPatientName, setNewPatientName] = useState('');
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    loadPatients();
-  }, []);
-
-  const loadPatients = async () => {
+  const loadPatients = useCallback(async () => {
     try {
-      setLoading(true);
       const data = await getPatients();
       setPatients(data);
       setError(null);
@@ -28,7 +24,27 @@ const Patients = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    getPatients()
+      .then((data) => {
+        if (!active) return;
+        setPatients(data);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError('Failed to load patients');
+        console.error('Error loading patients:', err);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => { active = false; };
+  }, []);
 
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +55,7 @@ const Patients = () => {
       await createPatient({ name: newPatientName.trim() });
       setNewPatientName('');
       setShowCreateModal(false);
-      loadPatients();
+      await loadPatients();
     } catch (err) {
       setError('Failed to create patient');
       console.error('Error creating patient:', err);
@@ -55,7 +71,7 @@ const Patients = () => {
 
     try {
       await deletePatient(patientId);
-      loadPatients();
+      await loadPatients();
     } catch (err) {
       setError('Failed to delete patient');
       console.error('Error deleting patient:', err);
@@ -67,11 +83,14 @@ const Patients = () => {
   }
 
   return (
-    <div className="patients-container">
-      <div className="patients-header">
-        <h1>Patients</h1>
+    <div className="patients-container page-container">
+      <div className="patients-header page-heading">
+        <div>
+          <h1>Patients</h1>
+          <p>Manage patients and their analysis history.</p>
+        </div>
         <button 
-          className="create-button"
+          className="button button-primary create-button"
           onClick={() => setShowCreateModal(true)}
         >
           + New Patient
@@ -85,13 +104,13 @@ const Patients = () => {
           <p>No patients yet. Create your first patient to get started.</p>
         </div>
       ) : (
-        <div className="patients-table">
+        <div className="patients-table surface-card">
           <table>
             <thead>
               <tr>
                 <th>Patient ID</th>
                 <th>Name</th>
-                <th>Created At</th>
+                <th>Created Date</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -100,20 +119,22 @@ const Patients = () => {
                 <tr key={patient.id}>
                   <td>{patient.patient_code}</td>
                   <td>{patient.name}</td>
-                  <td>{new Date(patient.created_at).toLocaleDateString()}</td>
+                  <td>{formatDateOnly(patient.created_at)}</td>
                   <td>
-                    <Link 
-                      to={`/patients/${patient.id}`}
-                      className="action-button view-button"
-                    >
-                      View
-                    </Link>
-                    <button 
-                      className="action-button delete-button"
-                      onClick={() => handleDeletePatient(patient.id, patient.name)}
-                    >
-                      Delete
-                    </button>
+                    <div className="table-actions">
+                      <Link
+                        to={`/patients/${patient.id}`}
+                        className="button button-secondary button-small view-button"
+                      >
+                        View
+                      </Link>
+                      <button
+                        className="button button-danger button-small delete-button"
+                        onClick={() => handleDeletePatient(patient.id, patient.name)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -123,9 +144,21 @@ const Patients = () => {
       )}
 
       {showCreateModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Create New Patient</h2>
+        <div className="modal-overlay" onMouseDown={() => setShowCreateModal(false)}>
+          <div
+            className="modal-content"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-patient-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="modal-heading">
+              <div>
+                <h2 id="create-patient-title">Create New Patient</h2>
+                <p>Enter the patient name to create a record.</p>
+              </div>
+              <button type="button" className="modal-close" aria-label="Close dialog" onClick={() => setShowCreateModal(false)}>×</button>
+            </div>
             <form onSubmit={handleCreatePatient}>
               <div className="form-group">
                 <label htmlFor="patientName">Patient Name</label>
@@ -141,14 +174,14 @@ const Patients = () => {
               <div className="modal-actions">
                 <button 
                   type="button"
-                  className="cancel-button"
+                  className="button button-secondary"
                   onClick={() => setShowCreateModal(false)}
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit"
-                  className="submit-button"
+                  className="button button-primary"
                   disabled={creating}
                 >
                   {creating ? 'Creating...' : 'Create Patient'}
