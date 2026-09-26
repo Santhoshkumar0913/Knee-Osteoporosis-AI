@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getAnalysis } from '../../services/api';
+import { getAnalysis, getAnalysisImageUrl } from '../../services/api';
 import type { Analysis } from '../../types';
 import './AnalysisResult.css';
 
@@ -10,6 +10,7 @@ const AnalysisResult = () => {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     if (analysisId) {
@@ -20,6 +21,7 @@ const AnalysisResult = () => {
   const loadAnalysis = async () => {
     try {
       setLoading(true);
+      setImageError(false);
       const data = await getAnalysis(parseInt(analysisId!));
       setAnalysis(data);
       setError(null);
@@ -62,6 +64,22 @@ const AnalysisResult = () => {
       {error && <div className="error-message">{error}</div>}
 
       <div className="results-grid">
+        <section className="result-card xray-card" aria-labelledby="original-xray-title">
+          <h2 id="original-xray-title">Original X-ray</h2>
+          {imageError ? (
+            <p className="xray-error" role="status">
+              The saved X-ray image could not be loaded.
+            </p>
+          ) : (
+            <img
+              className="original-xray-image"
+              src={getAnalysisImageUrl(analysis.id)}
+              alt="Original knee X-ray uploaded for this analysis"
+              onError={() => setImageError(true)}
+            />
+          )}
+        </section>
+
         {/* X-ray Classification */}
         <div className="result-card classification-card">
           <h2>X-ray Classification</h2>

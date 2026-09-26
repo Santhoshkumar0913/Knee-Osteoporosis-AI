@@ -259,6 +259,28 @@
   gap: 20px;
 }
 
+.xray-card {
+  grid-column: 1 / -1;
+}
+
+.original-xray-image {
+  display: block;
+  width: 100%;
+  max-height: 620px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #101820;
+}
+
+.xray-error {
+  margin: 0;
+  padding: 1rem;
+  color: #8a3d35;
+  background: #fff1ef;
+  border-radius: var(--radius-sm);
+}
+
 .result-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);

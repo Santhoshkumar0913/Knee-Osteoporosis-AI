@@ -35,11 +35,11 @@ Phase 3 adds:
 
 ```text
 Original saved X-ray API        PHASE 3D IMPLEMENTED
-Original X-ray UI display       NOT IMPLEMENTED
+Original X-ray in Analysis Result PHASE 3E IMPLEMENTED
 Grad-CAM prototype              IMPLEMENTED; research only
 Grad-CAM user-facing explanation NOT VALIDATED / NOT APPROVED
 X-ray + heatmap visualization  NOT IMPLEMENTED
-XAI API                        NOT IMPLEMENTED
+XAI API                        TEMPORARILY DEFERRED
 Clinical Support XAI UI        NOT IMPLEMENTED
 PDF generation                 NOT IMPLEMENTED
 PDF download                   NOT IMPLEMENTED
@@ -56,8 +56,11 @@ validated user-facing explanation and must not be exposed in the product UI or
 described as clinical evidence. Keep the prototype intact for future research
 and validation.
 
-Phase 3D adds only the original saved X-ray API. It does not expose Grad-CAM or
-add frontend or PDF integration.
+Phase 3D added the controlled original saved X-ray API. Phase 3E integrates
+only that original image into Analysis Result. The XAI API and all
+user-facing Grad-CAM integration are temporarily deferred because Phase 3C
+found inconsistent attribution to letterbox padding. Do not expose current
+Grad-CAM through an API, Analysis Result, Clinical Support, or PDF.
 
 ---
 
@@ -87,6 +90,18 @@ Create Analysis database row
 Save original X-ray locally
     ↓
 Return Analysis to frontend
+```
+
+Original X-ray display in Analysis Result:
+
+```text
+Analysis Result loads saved Analysis
+    ↓
+GET /api/analyses/{analysis_id}/image
+    ↓
+Resolve and serve that analysis's saved image
+    ↓
+Display original X-ray
 ```
 
 Clinical Support:
@@ -220,18 +235,18 @@ The database stores:
 Analysis.image_path
 ```
 
-There is currently:
+There is now:
 
 ```text
-no image-serving endpoint
-no static image mount
+GET /api/analyses/{analysis_id}/image
+controlled per-analysis image serving; no static image mount
 ```
 
 `get_full_image_path()` exists as a helper but is not currently used to serve
 images to the frontend.
 
-Therefore, original X-ray display is a backend integration task, not a
-frontend-only change.
+The Analysis Result loads this endpoint using the analysis ID. The original
+image is displayed without generating or displaying Grad-CAM.
 
 ---
 
@@ -471,7 +486,21 @@ Do not expose arbitrary storage files.
 
 ---
 
-# 12. Phase 3E — XAI Endpoint
+# 11A. Phase 3E — Original X-ray in Analysis Result
+
+Use the completed endpoint:
+
+```text
+GET /api/analyses/{analysis_id}/image
+```
+
+Show only the saved original X-ray in the existing Analysis Result page. Keep
+image loading failure local to the image section so the saved analysis result
+remains visible. Do not generate or display Grad-CAM in this phase.
+
+---
+
+# 12. Phase 3F — XAI Endpoint (Temporarily Deferred)
 
 Suggested:
 
@@ -548,7 +577,12 @@ anatomical pathology map.
 
 ---
 
-# 15. Phase 3F — Analysis Result UI
+# 15. Phase 3G — Analysis Result XAI UI (Temporarily Deferred)
+
+This phase is temporarily deferred. The requirements below describe the
+future XAI UI only; do not expose the current Grad-CAM prototype until the
+padding-attribution limitation has been addressed and the result has been
+revalidated.
 
 Update the existing:
 
@@ -600,7 +634,7 @@ New Analysis
 
 ---
 
-# 16. Phase 3G — Clinical Support UI
+# 16. Phase 3H — Clinical Support UI
 
 Update:
 
@@ -679,7 +713,7 @@ the model-estimated T/Z values.
 
 ---
 
-# 18. Phase 3H — PDF Generation
+# 18. Phase 3I — PDF Generation
 
 Create a dedicated PDF service, for example:
 
@@ -978,6 +1012,12 @@ npm run build
 npm run lint
 ```
 
+Phase 3E verification: `npm run build` succeeds. `npm run lint` exits
+successfully with warnings in Patients, PatientDetails, AnalysisResult,
+ClinicalSupport, and NewAnalysis. The AnalysisResult hook warnings come from
+its existing data-loading effect pattern, which predates the original-image
+display.
+
 ---
 
 # 25. Visual Validation
@@ -1040,21 +1080,24 @@ Phase 3D
 Original X-ray endpoint
         ↓
 Phase 3E
-XAI endpoint
+Original X-ray in Analysis Result
         ↓
 Phase 3F
-Analysis Result UI
+XAI API (temporarily deferred pending further attribution validation)
         ↓
 Phase 3G
-Clinical Support UI
+Analysis Result XAI UI (deferred)
         ↓
 Phase 3H
-PDF service
+Clinical Support XAI UI (deferred)
         ↓
 Phase 3I
-PDF download UI
+PDF service (deferred)
         ↓
 Phase 3J
+PDF download UI (deferred)
+        ↓
+Phase 3K
 Full regression
 ```
 
@@ -1124,7 +1167,7 @@ Do not add emojis, prefixes, or unrelated commit information.
 [x] Grad-CAM prototype works (research only; not approved for user-facing use)
 [ ] Grad-CAM visually validated
 [x] Original X-ray endpoint works
-[ ] Original X-ray shown in Analysis Result
+[x] Original X-ray shown in Analysis Result
 [ ] Grad-CAM shown in Analysis Result
 [ ] X-ray and Grad-CAM shown in Clinical Support
 [ ] Clinical Support grounding rules preserved
@@ -1139,8 +1182,8 @@ Do not add emojis, prefixes, or unrelated commit information.
 [ ] PDF contains sources
 [ ] PDF contains grounding note
 [ ] PDF contains disclaimer
-[ ] Frontend build passes
-[ ] Frontend lint passes or existing warnings documented
+[x] Frontend build passes
+[x] Frontend lint passes with warnings documented above
 [ ] Backend tests pass
 [ ] Regression tests pass
 [ ] Git working tree clean
