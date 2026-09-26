@@ -85,4 +85,16 @@ export const getClinicalSupport = async (analysisId: number): Promise<ClinicalSu
   return response.data;
 };
 
+export const downloadClinicalSupportPdf = async (
+  analysisId: number,
+  clinicalSupport: ClinicalSupportResponse,
+): Promise<Blob> => {
+  const response = await api.post(
+    `/analyses/${analysisId}/clinical-support/pdf`,
+    clinicalSupport,
+    { responseType: 'blob' },
+  );
+  return response.data;
+};
+
 export default api;

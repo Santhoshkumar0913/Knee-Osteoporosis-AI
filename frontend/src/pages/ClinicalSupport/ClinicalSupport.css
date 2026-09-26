@@ -78,7 +78,8 @@
 .sources-list { color: var(--muted); }
 .grounding-note { margin-top: 14px; padding: 13px 15px; border: 1px solid #d3e4f3; border-radius: 9px; color: #335b79; background: #f1f7fc; font-size: 0.84rem; line-height: 1.6; }
 .disclaimer { margin-top: 12px; padding: 13px 15px; border-left: 3px solid #d49b31; border-radius: 7px; color: #785516; background: #fff7e8; font-size: 0.83rem; line-height: 1.6; }
-.support-actions { display: flex; justify-content: flex-end; margin: 17px 0; }
+.support-actions { display: flex; justify-content: flex-end; gap: 10px; margin: 17px 0; }
+.pdf-error { margin-top: -8px; color: var(--danger); font-size: 0.85rem; text-align: right; }
 .page-actions { display: flex; justify-content: flex-start; }
 
 .retry-button { min-height: 39px; padding: 0 14px; border: 1px solid #ccdae6; border-radius: 8px; color: var(--navy); background: #fff; font-weight: 650; cursor: pointer; }
