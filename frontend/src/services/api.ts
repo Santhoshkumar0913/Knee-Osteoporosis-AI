@@ -72,6 +72,9 @@ export const getAnalysis = async (analysisId: number): Promise<Analysis> => {
   return response.data;
 };
 
+export const getAnalysisImageUrl = (analysisId: number): string =>
+  `${API_BASE_URL}/analyses/${analysisId}/image`;
+
 export const deleteAnalysis = async (analysisId: number): Promise<void> => {
   await api.delete(`/analyses/${analysisId}`);
 };
