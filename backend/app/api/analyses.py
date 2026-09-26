@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.database import get_db
@@ -7,6 +8,7 @@ from app.schemas.analysis import AnalysisCreate, AnalysisResponse, AnalysisListR
 from app.services.storage_service import storage_service
 from app.services.prediction_service import get_prediction_service
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +165,42 @@ async def get_analysis(analysis_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Analysis not found")
     
     return analysis
+
+
+@router.get("/{analysis_id}/image")
+def get_analysis_image(analysis_id: int, db: Session = Depends(get_db)):
+    """Serve the saved original X-ray associated with one analysis."""
+    analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    if not analysis.image_path:
+        raise HTTPException(status_code=404, detail="Analysis image not found")
+
+    patient_code = analysis.patient.patient_code if analysis.patient else None
+    if not patient_code:
+        raise HTTPException(status_code=404, detail="Analysis image not found")
+
+    media_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+    }
+    media_type = media_types.get(Path(analysis.image_path).suffix.lower())
+    if media_type is None:
+        raise HTTPException(status_code=415, detail="Unsupported image type")
+
+    try:
+        image_path = storage_service.resolve_analysis_image_path(
+            analysis.image_path, patient_code, analysis.id
+        )
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Analysis image not found")
+
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="Analysis image not found")
+
+    return FileResponse(path=image_path, media_type=media_type)
 
 
 @router.delete("/{analysis_id}")

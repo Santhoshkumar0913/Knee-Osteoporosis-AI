@@ -50,5 +50,31 @@ class StorageService:
         """Convert relative path to absolute path"""
         return Path(relative_path)
 
+    def resolve_analysis_image_path(
+        self, relative_path: str, patient_code: str, analysis_id: int
+    ) -> Path:
+        """Resolve only the expected image file for the given analysis."""
+        stored_path = Path(relative_path)
+        if stored_path.is_absolute() or not relative_path:
+            raise ValueError("Invalid stored image path")
+
+        storage_root = self.storage_path.resolve()
+        project_root = storage_root.parent.parent
+        image_path = (project_root / stored_path).resolve()
+
+        try:
+            image_path.relative_to(storage_root)
+        except ValueError as exc:
+            raise ValueError("Stored image path is outside image storage") from exc
+
+        if image_path.parent != (storage_root / patient_code).resolve():
+            raise ValueError("Stored image path does not match its analysis")
+        if image_path.stem != f"{analysis_id}_xray":
+            raise ValueError("Stored image path does not match its analysis")
+        if image_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            raise ValueError("Unsupported stored image type")
+
+        return image_path
+
 
 storage_service = StorageService()
