@@ -4,6 +4,7 @@ OpenRouter LLM service for clinical support generation
 import logging
 import httpx
 import json
+import re
 from typing import Dict, Any, Optional
 from app.core.config import settings
 
@@ -68,7 +69,7 @@ class OpenRouterService:
                     "messages": [
                         {
                             "role": "system",
-                            "content": "You are a helpful medical assistant providing evidence-based information about osteoporosis. Always base your responses on the provided evidence. Do not invent facts, citations, or medical advice. Do not prescribe medications or dosages. Always recommend consulting a doctor for medical decisions."
+                            "content": "You provide evidence-based educational information about osteoporosis. Keep the DINOv2 image-model prediction, the application's model-estimated T-score, the application's model-estimated Z-score, and retrieved RAG evidence distinct. The given DINOv2 class is authoritative for this response: do not reclassify or contradict it based on either model-estimated score. The T-score and Z-score are model estimates only, never measured DXA/QUS, bone-density test, or laboratory results. Always base medical information on supplied evidence, do not invent facts or citations, do not prescribe medications or dosages, and recommend consulting a doctor for medical decisions."
                         },
                         {
                             "role": "user",
@@ -104,27 +105,14 @@ class OpenRouterService:
                                     raise ValueError("OpenRouter returned null or empty content after retries")
                         
                         try:
-                            return self._parse_clinical_support_response(generated_text, retrieved_chunks)
+                            return self._parse_clinical_support_response(
+                                generated_text,
+                                retrieved_chunks,
+                                analysis_context,
+                            )
                         except ValueError as e:
-                            # Fallback: put raw text in explanation if parsing fails
-                            logger.warning(f"Structured parsing failed, using raw text: {e}")
-                            # Extract sources even for fallback
-                            sources = []
-                            seen_sources = set()
-                            for chunk in retrieved_chunks:
-                                org = chunk.get('organization', 'Unknown')
-                                year = chunk.get('publication_year', 'Unknown')
-                                source_key = f"{org} — {year}"
-                                if source_key not in seen_sources:
-                                    sources.append({"organization": org, "year": year})
-                                    seen_sources.add(source_key)
-                            return {
-                                "explanation": generated_text,
-                                **{field: [] for field in SECTION_FIELDS},
-                                "sources": sources,
-                                "grounding_note": GROUNDING_NOTE,
-                                "disclaimer": DISCLAIMER,
-                            }
+                            logger.warning(f"Structured parsing failed; using a safe explanation: {e}")
+                            return self._safe_score_claim_fallback(retrieved_chunks, analysis_context)
                     else:
                         raise ValueError("Invalid response format from OpenRouter")
                         
@@ -146,7 +134,16 @@ class OpenRouterService:
         analysis_context: Dict[str, Any]
     ) -> str:
         """Build the prompt for clinical support generation"""
-        prompt = f"""Based on the following patient case and retrieved medical evidence, provide evidence-based clinical support.
+        prompt = f"""Provide evidence-based clinical support using the patient case and retrieved medical evidence below. Keep these four information sources distinct:
+
+1. DINOv2 image-model prediction: {analysis_context.get('predicted_diagnosis', 'Unknown')} (predicted class {analysis_context.get('predicted_class', 'Unknown')}). Report this class as given.
+2. The application's model-estimated T-score: {analysis_context.get('t_score', 'Unknown')} (model estimate, not a measurement).
+3. The application's model-estimated Z-score: {analysis_context.get('z_score', 'Unknown')} (model estimate, not a measurement).
+4. Retrieved RAG evidence: the source excerpts below. Use these as evidence, not as patient test results.
+
+The DINOv2 image-model prediction is the application's predicted class. Do not use either score to independently diagnose, reclassify, override, or contradict that prediction. Do not infer a diagnosis or severity category from either score. When mentioning either score, explicitly call it "the application's model-estimated T-score" or "the application's model-estimated Z-score" (or say "the model estimated ..."). Never describe either estimate as measured, as a DXA or QUS result, as a bone-density test result, or as a laboratory measurement. Do not imply that this application measured bone density.
+
+The explanation must explicitly distinguish the supplied DINOv2 prediction, both model-estimated scores, and the retrieved RAG evidence. Name each score using the model-estimated terminology above.
 
 PATIENT CASE:
 {query}
@@ -155,7 +152,7 @@ RETRIEVED EVIDENCE:
 {evidence_context}
 
 INSTRUCTIONS:
-1. Explain the prediction in simple, patient-friendly language
+1. Explain the DINOv2 image-model prediction separately from both model-estimated scores and retrieved evidence.
 2. Provide specific "What you can do now" recommendations
 3. List topics to "Talk to your doctor about"
 4. Include "Testing and follow-up considerations" if relevant
@@ -180,7 +177,8 @@ Return ONLY valid JSON. Do not include any text outside the JSON structure."""
     def _parse_clinical_support_response(
         self,
         generated_text: str,
-        retrieved_chunks: list
+        retrieved_chunks: list,
+        analysis_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Parse the generated response into structured format"""
         parsed = self._extract_json_object(generated_text)
@@ -205,9 +203,129 @@ Return ONLY valid JSON. Do not include any text outside the JSON structure."""
             "disclaimer": DISCLAIMER,
         }
 
+        response_text = " ".join(
+            [response["explanation"]]
+            + [item for field in SECTION_FIELDS for item in response[field]]
+        )
+        if (
+            self._contains_unsafe_score_claim(response_text)
+            or self._contradicts_prediction(response_text, analysis_context or {})
+        ):
+            logger.warning("Unsafe score or prediction wording in generated clinical support; using a safe explanation")
+            return self._safe_score_claim_fallback(retrieved_chunks, analysis_context or {})
+
+        if analysis_context:
+            response["explanation"] = self._prepend_analysis_summary(
+                response["explanation"],
+                analysis_context,
+                retrieved_chunks,
+            )
+
         if parsed:
             logger.info("Successfully parsed structured LLM response")
         return response
+
+    @staticmethod
+    def _contradicts_prediction(text: str, analysis_context: Dict[str, Any]) -> bool:
+        """Detect an explicit generated statement that assigns a different predicted class."""
+        expected = str(analysis_context.get("predicted_diagnosis", "")).strip().lower()
+        if not expected:
+            return False
+        prediction_claim = re.compile(
+            r"\b(?:predicted(?:\s+(?:class|diagnosis))?|prediction\s+(?:is|was|of)|classified\s+as|diagnosed\s+with)"
+            r"\s*(?:(?:is|was|:)\s+)?"
+            r"(?:a\s+diagnosis\s+of\s+)?(normal|osteopenia|osteoporosis)\b",
+            re.IGNORECASE,
+        )
+        return any(
+            match.group(1).lower() != expected
+            for match in prediction_claim.finditer(text or "")
+        )
+
+    def _prepend_analysis_summary(
+        self,
+        explanation: str,
+        analysis_context: Dict[str, Any],
+        retrieved_chunks: list,
+    ) -> str:
+        """Make the four evidence sources explicit using values from the saved analysis."""
+        diagnosis = analysis_context.get("predicted_diagnosis", "the recorded class")
+        t_score = self._format_model_estimate(analysis_context.get("t_score"))
+        z_score = self._format_model_estimate(analysis_context.get("z_score"))
+        evidence_summary = (
+            "Retrieved RAG evidence is listed in the sources and provides the evidence context for the guidance below."
+            if retrieved_chunks
+            else "No RAG evidence was retrieved for this response."
+        )
+        summary = (
+            f"DINOv2 image-model prediction: {diagnosis}. Separately, the application's "
+            f"model-estimated T-score is {t_score}, and the application's model-estimated "
+            f"Z-score is {z_score}. These values are model estimates, not measured "
+            "bone-density results, and neither score independently changes or overrides "
+            f"the DINOv2 prediction. {evidence_summary} "
+        )
+        return summary + explanation.strip()
+
+    @staticmethod
+    def _contains_unsafe_score_claim(text: str) -> bool:
+        """Detect direct measurement claims or score-based reclassification."""
+        score = r"(?:model[- ]estimated\s+)?[tz][ -]?score"
+        measurement = r"(?:measured|measurement|laboratory(?:[- ]based)?|dxa|qus|bone[- ]density test|bone density test)"
+        decision = r"(?:indicates?|means?|proves?|shows?|confirms?|establishes?|classifies?|reclassifies?)"
+        classes = r"(?:normal|osteopenia|osteoporosis)"
+
+        for sentence in re.split(r"(?<=[.!?])\s+", text or ""):
+            lowered = sentence.lower()
+            has_negated_measurement = bool(
+                re.search(r"\b(?:not|never|isn't|aren't|wasn't|weren't)\b.{0,35}\b" + measurement, lowered)
+                or re.search(r"\b" + measurement + r"\b.{0,25}\b(?:not|never)\b", lowered)
+            )
+            measurement_claim = (
+                re.search(r"\b" + score + r"\b[^.!?]{0,80}\b" + measurement + r"\b", lowered)
+                or re.search(r"\b" + measurement + r"\b[^.!?]{0,80}\b" + score + r"\b", lowered)
+            )
+            if measurement_claim and not has_negated_measurement:
+                return True
+            if re.search(r"\b" + score + r"\b[^.!?]{0,80}\b" + decision + r"\b[^.!?]{0,50}\b" + classes + r"\b", lowered):
+                return True
+        return False
+
+    def _safe_score_claim_fallback(
+        self,
+        retrieved_chunks: list,
+        analysis_context: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Fail closed if generated text conflates estimates with measurements or classification."""
+        context = analysis_context or {}
+        diagnosis = context.get("predicted_diagnosis", "the recorded class")
+        t_score = self._format_model_estimate(context.get("t_score"))
+        z_score = self._format_model_estimate(context.get("z_score"))
+        evidence_summary = (
+            "Retrieved RAG evidence is listed in the sources."
+            if retrieved_chunks
+            else "No RAG evidence was retrieved for this response."
+        )
+        explanation = (
+            f"The DINOv2 image model predicted {diagnosis}. Separately, the application's "
+            f"model-estimated T-score is {t_score}, and the application's model-estimated "
+            f"Z-score is {z_score}. These are model estimates; they are not measured "
+            "bone-density results and do not independently change or override the DINOv2 "
+            f"prediction. {evidence_summary} It does not replace the image-model prediction."
+        )
+        return {
+            "explanation": explanation,
+            **{field: [] for field in SECTION_FIELDS},
+            "sources": self._build_sources(retrieved_chunks),
+            "grounding_note": GROUNDING_NOTE,
+            "disclaimer": DISCLAIMER,
+        }
+
+    @staticmethod
+    def _format_model_estimate(value: Any) -> str:
+        try:
+            return f"{float(value):.2f}"
+        except (TypeError, ValueError):
+            return "unavailable"
 
     @staticmethod
     def _extract_json_object(value: Any) -> Optional[Dict[str, Any]]:
@@ -268,9 +386,23 @@ Return ONLY valid JSON. Do not include any text outside the JSON structure."""
             if source_key not in seen_sources:
                 sources.append({"organization": org, "year": year})
                 seen_sources.add(source_key)
+
+        evidence_summary = (
+            "Retrieved RAG evidence is listed in the sources and is separate from the image-model prediction and score estimates."
+            if sources
+            else "No RAG evidence was retrieved for this response."
+        )
         
         return {
-            "explanation": f"Based on your analysis, the model predicted a diagnosis of {diagnosis}. Your estimated T-score is {t_score:.2f} and Z-score is {z_score:.2f}. These scores are estimates based on the ML model and clinical inputs, not measured DXA/QUS values. The ranges provided represent empirical prediction-error margins.",
+            "explanation": (
+                f"The DINOv2 image model predicted {diagnosis}. Separately, the application's "
+                f"model-estimated T-score is {t_score:.2f}, and the application's "
+                f"model-estimated Z-score is {z_score:.2f}. These are model estimates from "
+                "the application's clinical models, not measured bone-density results, and "
+                "they do not independently change or override the DINOv2 prediction. "
+                f"{evidence_summary} The displayed ranges represent "
+                "empirical prediction-error margins."
+            ),
             "what_you_can_do_now": [
                 "Maintain a balanced diet rich in calcium and vitamin D",
                 "Engage in regular weight-bearing and muscle-strengthening exercises",
@@ -292,7 +424,7 @@ Return ONLY valid JSON. Do not include any text outside the JSON structure."""
                 "Treatment options depend on your actual bone density test results",
                 "Your doctor may recommend lifestyle changes, supplements, or medications"
             ],
-            "sources": sources if sources else [{"organization": "BHOF", "year": 2023}],
+            "sources": sources,
             "grounding_note": "This response is based on the retrieved medical evidence and your analysis results. OpenRouter API integration is not configured.",
             "disclaimer": "AI-assisted guidance for informational purposes. This does not replace a doctor's diagnosis or treatment decision. Discuss medical decisions with your doctor."
         }

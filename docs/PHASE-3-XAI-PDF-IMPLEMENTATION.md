@@ -36,6 +36,7 @@ Phase 3 adds:
 ```text
 Original saved X-ray API        PHASE 3D IMPLEMENTED
 Original X-ray in Analysis Result PHASE 3E IMPLEMENTED
+Original X-ray in Clinical Support IMPLEMENTED
 Grad-CAM prototype              IMPLEMENTED; research only
 Grad-CAM user-facing explanation NOT VALIDATED / NOT APPROVED
 X-ray + heatmap visualization  NOT IMPLEMENTED
@@ -43,6 +44,7 @@ XAI API                        TEMPORARILY DEFERRED
 Clinical Support XAI UI        NOT IMPLEMENTED
 PDF generation                 NOT IMPLEMENTED
 PDF download                   NOT IMPLEMENTED
+Clinical Support grounding correction IMPLEMENTED; unit and live LLM checks passed
 ```
 
 ### Current implementation status
@@ -57,10 +59,21 @@ described as clinical evidence. Keep the prototype intact for future research
 and validation.
 
 Phase 3D added the controlled original saved X-ray API. Phase 3E integrates
-only that original image into Analysis Result. The XAI API and all
-user-facing Grad-CAM integration are temporarily deferred because Phase 3C
-found inconsistent attribution to letterbox padding. Do not expose current
-Grad-CAM through an API, Analysis Result, Clinical Support, or PDF.
+only that original image into Analysis Result. The original saved X-ray is also
+shown in Clinical Support. The XAI API and all user-facing Grad-CAM integration
+are temporarily deferred because Phase 3C found inconsistent attribution to
+letterbox padding. Do not expose current Grad-CAM through an API, Analysis
+Result, Clinical Support, or PDF.
+
+The Clinical Support grounding correction labels the DINOv2 class, both
+clinical-model score estimates, and retrieved RAG evidence separately. The
+retrieval query and LLM instructions name T/Z values as model estimates. The
+response parser fails closed to a deterministic, analysis-grounded explanation
+when generated content describes an estimate as a measurement or contradicts
+the recorded DINOv2 class. Unit tests pass. A live OpenRouter generation using
+synthetic, non-patient validation data also passed the terminology checks. The
+local API server was unavailable, so the full HTTP endpoint and pgvector
+retrieval path were not exercised in that live check.
 
 ---
 
@@ -1168,10 +1181,11 @@ Do not add emojis, prefixes, or unrelated commit information.
 [ ] Grad-CAM visually validated
 [x] Original X-ray endpoint works
 [x] Original X-ray shown in Analysis Result
+[x] Original X-ray shown in Clinical Support
 [ ] Grad-CAM shown in Analysis Result
 [ ] X-ray and Grad-CAM shown in Clinical Support
-[ ] Clinical Support grounding rules preserved
-[ ] T/Z remain clearly model estimates
+[x] Clinical Support grounding rules preserved
+[x] T/Z remain clearly model estimates
 [ ] PDF generation works
 [ ] PDF contains original X-ray
 [ ] PDF contains Grad-CAM
@@ -1183,8 +1197,8 @@ Do not add emojis, prefixes, or unrelated commit information.
 [ ] PDF contains grounding note
 [ ] PDF contains disclaimer
 [x] Frontend build passes
-[x] Frontend lint passes with warnings documented above
-[ ] Backend tests pass
+[x] Frontend lint passes
+[x] Focused Clinical Support backend tests pass (16 tests)
 [ ] Regression tests pass
 [ ] Git working tree clean
 [ ] Changes pushed to feature/rag-llm
