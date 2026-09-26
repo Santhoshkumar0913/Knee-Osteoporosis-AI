@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getPatient, createAnalysis } from '../../services/api';
 import type { Patient } from '../../types';
 import './NewAnalysis.css';
@@ -27,26 +27,7 @@ const NewAnalysis = () => {
   const [longTermSteroidUse, setLongTermSteroidUse] = useState('');
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (patientId) {
-      loadPatient();
-    }
-  }, [patientId]);
-
-  const loadPatient = async () => {
-    try {
-      setLoading(true);
-      const data = await getPatient(parseInt(patientId!));
-      setPatient(data);
-      setError(null);
-    } catch (err) {
-      setError('Failed to load patient');
-      console.error('Error loading patient:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [isDragging, setIsDragging] = useState(false);
 
   const calculateBMI = () => {
     if (height && weight) {
@@ -59,8 +40,7 @@ const NewAnalysis = () => {
     return '';
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleSelectedImage = (file?: File) => {
     if (file) {
       // Validate file type
       const allowedTypes = ['image/png', 'image/jpeg', 'image/webp'];
@@ -86,6 +66,32 @@ const NewAnalysis = () => {
       reader.readAsDataURL(file);
     }
   };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleSelectedImage(e.target.files?.[0]);
+    e.target.value = '';
+  };
+
+  useEffect(() => {
+    if (!patientId) return;
+    let active = true;
+    getPatient(parseInt(patientId))
+      .then((data) => {
+        if (!active) return;
+        setPatient(data);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setError('Failed to load patient');
+        console.error('Error loading patient:', err);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [patientId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,45 +165,80 @@ const NewAnalysis = () => {
   const bmi = calculateBMI();
 
   return (
-    <div className="new-analysis-container">
+    <div className="new-analysis-container page-container">
       <div className="breadcrumb">
-        <span>Patient: {patient.patient_code} — {patient.name}</span>
+        <Link to="/patients">Patients</Link>
+        <span aria-hidden="true">›</span>
+        <Link to={`/patients/${patient.id}`}>{patient.patient_code}</Link>
+        <span aria-hidden="true">›</span>
+        <span>New Analysis</span>
       </div>
 
-      <h1>New Analysis</h1>
+      <div className="page-heading new-analysis-heading">
+        <div>
+          <h1>New Analysis</h1>
+          <p>Upload a knee X-ray and enter the available clinical information.</p>
+        </div>
+      </div>
+
+      <section className="selected-patient surface-card" aria-label="Selected patient">
+        <span className="selected-patient-label">Patient Information</span>
+        <div><span>Patient ID</span><strong>{patient.patient_code}</strong></div>
+        <div><span>Name</span><strong>{patient.name}</strong></div>
+      </section>
+
+      <ol className="analysis-steps" aria-label="Analysis workflow">
+        <li className="step-complete"><span>1</span><div>Patient Information</div></li>
+        <li className={image ? 'step-complete' : 'step-current'} aria-current={image ? undefined : 'step'}><span>2</span><div>X-ray Upload</div></li>
+        <li className={image ? 'step-current' : 'step-upcoming'} aria-current={image ? 'step' : undefined}><span>3</span><div>Clinical Information</div></li>
+        <li className="step-upcoming"><span>4</span><div>Review &amp; Analysis</div></li>
+      </ol>
 
       {error && <div className="error-message">{error}</div>}
 
       <form onSubmit={handleSubmit} className="analysis-form">
         <div className="form-section">
           <h2>X-ray Upload</h2>
-          <div className="image-upload">
+          <div className={`image-upload${imagePreview ? ' has-preview' : ''}`}>
             {!imagePreview ? (
-              <div className="upload-area">
-                <div className="upload-icon">📷</div>
+              <div
+                className={`upload-area${isDragging ? ' is-dragging' : ''}`}
+                onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragOver={(e) => e.preventDefault()}
+                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setIsDragging(false); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  handleSelectedImage(e.dataTransfer.files[0]);
+                }}
+              >
+                <div className="upload-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7 9m5-5 5 5M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" /></svg>
+                </div>
                 <p>Drag & drop knee X-ray image here</p>
-                <p className="upload-hint">or</p>
+                <p className="upload-hint">or click to browse</p>
                 <input
                   type="file"
                   id="imageInput"
+                  className="upload-input"
                   accept="image/png,image/jpeg,image/webp"
                   onChange={handleImageChange}
-                  style={{ display: 'none' }}
                 />
-                <label htmlFor="imageInput" className="upload-button">
-                  Choose Image
+                <label htmlFor="imageInput" className="button button-primary upload-button">
+                  Choose X-ray
                 </label>
-                <p className="file-info">Supported formats: PNG, JPG, JPEG, WEBP (max 10MB)</p>
+                <p className="file-info">PNG, JPG, JPEG, or WEBP · Maximum size 10 MB</p>
               </div>
             ) : (
               <div className="image-preview">
                 <img src={imagePreview} alt="X-ray preview" />
                 <button
                   type="button"
-                  className="change-image-button"
+                  className="button button-secondary button-small change-image-button"
                   onClick={() => {
                     setImage(null);
                     setImagePreview(null);
+                    setIsDragging(false);
                   }}
                 >
                   Change Image
@@ -384,14 +425,14 @@ const NewAnalysis = () => {
         <div className="form-actions">
           <button
             type="button"
-            className="cancel-button"
+            className="button button-secondary cancel-button"
             onClick={() => navigate(`/patients/${patient.id}`)}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="submit-button"
+            className="button button-primary submit-button"
             disabled={analyzing || !image}
           >
             {analyzing ? 'Analyzing...' : 'Run Analysis'}

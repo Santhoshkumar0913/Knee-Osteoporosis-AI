@@ -1,222 +1,89 @@
-.patient-details-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
+.patient-details-container { max-width: 1320px; }
+.patient-header { margin-bottom: 22px; }
+.patient-info h1 { color: var(--navy); }
+.patient-meta { margin-top: 7px; color: var(--muted); font-size: 0.92rem; }
+.patient-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.patient-information,
+.analyses-section { padding: 22px; }
+
+.patient-information h2,
+.section-heading h2 {
+  color: var(--navy);
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
 }
 
-.breadcrumb {
-  margin-bottom: 1.5rem;
-  color: #666;
-  font-size: 0.875rem;
+.patient-information-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 17px;
 }
 
-.breadcrumb a {
-  color: #667eea;
-  text-decoration: none;
+.patient-information-grid > div {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid #e7edf2;
+  border-radius: 9px;
+  background: #f9fbfd;
 }
 
-.breadcrumb a:hover {
-  text-decoration: underline;
-}
-
-.patient-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 2px solid #e0e0e0;
-}
-
-.patient-info h1 {
-  margin: 0 0 0.5rem 0;
-  color: #333;
-  font-size: 2rem;
-}
-
-.patient-meta {
-  color: #666;
-  margin: 0;
-}
-
-.patient-actions {
-  display: flex;
-  gap: 1rem;
-}
-
-.action-button {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  text-decoration: none;
-  display: inline-block;
-  transition: background-color 0.2s;
-}
-
-.primary-button {
-  background-color: #667eea;
-  color: white;
-}
-
-.primary-button:hover {
-  background-color: #5568d3;
-}
-
-.danger-button {
-  background-color: #dc3545;
-  color: white;
-}
-
-.danger-button:hover {
-  background-color: #c82333;
-}
-
-.loading {
-  text-align: center;
-  padding: 2rem;
-  color: #666;
-}
-
-.error {
-  text-align: center;
-  padding: 2rem;
-  color: #c33;
-}
-
-.error-message {
-  background-color: #fee;
-  color: #c33;
-  padding: 1rem;
-  border-radius: 6px;
-  margin-bottom: 1rem;
-}
-
-.analyses-section h2 {
-  color: #333;
-  margin-bottom: 1.5rem;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 3rem;
-  color: #666;
-  background-color: #f8f9fa;
-  border-radius: 8px;
-}
-
-.analyses-table {
-  background-color: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.analyses-table table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.analyses-table th,
-.analyses-table td {
-  padding: 1rem;
-  text-align: left;
-  border-bottom: 1px solid #e0e0e0;
-}
-
-.analyses-table th {
-  background-color: #f8f9fa;
-  font-weight: 600;
-  color: #333;
-}
-
-.analyses-table tr:hover {
-  background-color: #f8f9fa;
-}
-
-.view-button {
-  background-color: #667eea;
-  color: white;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  margin-right: 0.5rem;
-}
-
-.view-button:hover {
-  background-color: #5568d3;
-}
-
-.delete-button {
-  background-color: #dc3545;
-  color: white;
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-}
-
-.delete-button:hover {
-  background-color: #c82333;
-}
-
-.patient-header {
-  padding: 24px 0 28px;
-  border-bottom: 1px solid var(--line);
-}
-
-.patient-info h1 {
-  margin-bottom: 8px;
-}
-
-.patient-meta,
-.breadcrumb {
+.patient-information-grid dt {
   color: var(--muted);
+  font-size: 0.77rem;
+  font-weight: 650;
 }
 
-.breadcrumb a {
-  color: var(--teal-dark);
+.patient-information-grid dd {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--navy);
+  font-size: 0.91rem;
   font-weight: 700;
 }
 
-.patient-actions {
-  flex-wrap: wrap;
+.analyses-section { margin-top: 20px; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 17px; }
+.section-heading p { margin-top: 4px; color: var(--muted); font-size: 0.86rem; }
+
+.analyses-table { overflow-x: auto; }
+.analyses-table table { width: 100%; min-width: 720px; border-collapse: collapse; text-align: left; }
+.analyses-table th,
+.analyses-table td { padding: 13px 15px; border-bottom: 1px solid #e8edf2; white-space: nowrap; }
+.analyses-table th { color: #566d82; background: #f4f8fc; font-size: 0.72rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+.analyses-table td { color: #31485d; font-size: 0.88rem; }
+.analyses-table tbody tr:last-child td { border-bottom: 0; }
+.analyses-table tbody tr:hover { background: #f9fbfd; }
+.history-actions { display: flex; gap: 8px; }
+
+.status-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 9px; font-size: 0.76rem; font-weight: 750; }
+.status-normal { color: #23744e; background: #e5f4eb; }
+.status-osteopenia { color: #946210; background: #fff1d4; }
+.status-osteoporosis { color: #a63d43; background: #ffebea; }
+
+.empty-state {
+  padding: 35px 20px;
+  border: 1px dashed #bdcbd8;
+  border-radius: 10px;
+  color: var(--muted);
+  background: #f8fafc;
+  text-align: center;
 }
 
-.action-button,
-.primary-button,
-.danger-button {
-  border-radius: var(--radius-sm);
-  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
-}
-
-.action-button:hover {
-  transform: translateY(-1px);
-}
-
-.primary-button {
-  background: var(--teal);
-}
-
-.primary-button:hover {
-  background: var(--teal-dark);
-}
-
-.analyses-section h2 {
-  color: var(--navy);
-  font-size: 1.35rem;
+@media (max-width: 1020px) {
+  .patient-information-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 700px) {
-  .patient-header {
-    gap: 20px;
-    flex-direction: column;
-  }
+  .patient-header { align-items: stretch; }
+  .patient-actions { flex-direction: column; }
+  .patient-actions .button { width: 100%; }
+  .patient-information,
+  .analyses-section { padding: 18px 15px; }
+  .patient-information-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
-  .patient-actions {
-    width: 100%;
-  }
-
-  .patient-actions .action-button {
-    flex: 1;
-    text-align: center;
-  }
+@media (max-width: 400px) {
+  .patient-information-grid { grid-template-columns: 1fr; }
 }
