@@ -42,8 +42,9 @@ Grad-CAM user-facing explanation NOT VALIDATED / NOT APPROVED
 X-ray + heatmap visualization  NOT IMPLEMENTED
 XAI API                        TEMPORARILY DEFERRED
 Clinical Support XAI UI        NOT IMPLEMENTED
-PDF generation                 NOT IMPLEMENTED
-PDF download                   NOT IMPLEMENTED
+PDF generation                 PHASE 3I IMPLEMENTED (ON DEMAND)
+PDF download                   PHASE 3J IMPLEMENTED
+PDF contains Grad-CAM          EXCLUDED; XAI REMAINS RESEARCH-ONLY
 Clinical Support grounding correction IMPLEMENTED; unit and live LLM checks passed
 ```
 
@@ -74,6 +75,15 @@ the recorded DINOv2 class. Unit tests pass. A live OpenRouter generation using
 synthetic, non-patient validation data also passed the terminology checks. The
 local API server was unavailable, so the full HTTP endpoint and pgvector
 retrieval path were not exercised in that live check.
+
+Phase 3I/3J generates the Clinical Support PDF on demand in memory. The
+Clinical Support page posts its currently displayed response; the PDF endpoint
+loads the saved analysis, patient, and original X-ray and does not call the LLM
+again or persist the PDF. The report includes only existing patient and
+analysis fields, probabilities, model-estimated scores and ranges, the current
+Clinical Support sections, actual source metadata, grounding note, and
+disclaimer. Grad-CAM is deliberately excluded while user-facing XAI remains
+deferred.
 
 ---
 
@@ -728,7 +738,7 @@ the model-estimated T/Z values.
 
 # 18. Phase 3I — PDF Generation
 
-Create a dedicated PDF service, for example:
+The dedicated PDF service is implemented at:
 
 ```text
 backend/app/services/pdf_service.py
@@ -736,15 +746,14 @@ backend/app/services/pdf_service.py
 
 Use on-demand generation.
 
-Preferred:
+Implemented flow:
 
 ```text
-GET PDF request
-→ load saved analysis
-→ obtain current Clinical Support response
-→ obtain X-ray/XAI assets
-→ generate PDF
-→ stream response
+POST /api/analyses/{analysis_id}/clinical-support/pdf with the currently displayed Clinical Support response
+→ load saved analysis and patient
+→ resolve original saved X-ray
+→ generate PDF in memory
+→ stream response without permanent storage
 ```
 
 Avoid permanent PDF storage unless later requirements justify it.
@@ -803,8 +812,10 @@ Long-term Steroid Use
 
 ```text
 Original X-ray
-Grad-CAM Overlay
 ```
+
+Do not include Grad-CAM in the PDF while the current attribution remains
+research-only and user-facing XAI is deferred.
 
 ## 4. Model Prediction
 
@@ -874,6 +885,10 @@ Download PDF
 PDF uses the response currently displayed
 ```
 
+The implemented download posts that displayed structured response to the PDF
+endpoint. The endpoint uses it as-is with the saved analysis and original
+image; it does not regenerate Clinical Support and keeps the PDF in memory.
+
 Do not silently call the LLM again for the same PDF when the current response
 is already available.
 
@@ -938,7 +953,9 @@ ReportLab
 HTML/CSS → PDF renderer
 ```
 
-The selected approach must work reliably in the project's environment.
+Phase 3 uses ReportLab, added as `reportlab>=4.2.0` in
+`backend/requirements.txt`. The endpoint streams an in-memory PDF and does not
+write a permanent report file.
 
 ---
 
@@ -993,11 +1010,17 @@ Test:
 - valid report;
 - required sections;
 - X-ray included;
-- Grad-CAM included;
+- Grad-CAM excluded while research-only;
 - Clinical Support included;
 - sources included;
 - disclaimer included;
 - error handling.
+
+Current focused verification: 16 Clinical Support tests and 6 PDF service/API
+tests pass. A synthetic QA report was rendered locally as a 3-page PDF and
+visually inspected. The local backend HTTP server was unavailable, so the
+download endpoint was tested directly with a database stub and a temporary
+saved-image fixture.
 
 ## Regression
 
@@ -1105,10 +1128,10 @@ Phase 3H
 Clinical Support XAI UI (deferred)
         ↓
 Phase 3I
-PDF service (deferred)
+PDF service (implemented on demand)
         ↓
 Phase 3J
-PDF download UI (deferred)
+PDF download UI (implemented; current response is posted)
         ↓
 Phase 3K
 Full regression
@@ -1186,19 +1209,20 @@ Do not add emojis, prefixes, or unrelated commit information.
 [ ] X-ray and Grad-CAM shown in Clinical Support
 [x] Clinical Support grounding rules preserved
 [x] T/Z remain clearly model estimates
-[ ] PDF generation works
-[ ] PDF contains original X-ray
-[ ] PDF contains Grad-CAM
-[ ] PDF contains predictions/probabilities
-[ ] PDF contains T/Z estimates and ranges
-[ ] PDF contains clinical context
-[ ] PDF contains Clinical Support
-[ ] PDF contains sources
-[ ] PDF contains grounding note
-[ ] PDF contains disclaimer
+[x] PDF generation works on demand in memory
+[x] PDF contains original X-ray
+[x] PDF excludes Grad-CAM while XAI is deferred
+[x] PDF contains predictions/probabilities
+[x] PDF contains model-estimated T/Z estimates and ranges
+[x] PDF contains clinical context
+[x] PDF contains the currently displayed Clinical Support
+[x] PDF contains retrieved sources
+[x] PDF contains grounding note
+[x] PDF contains disclaimer
 [x] Frontend build passes
 [x] Frontend lint passes
-[x] Focused Clinical Support backend tests pass (16 tests)
+[x] Focused Clinical Support and PDF backend tests pass (22 tests)
+[x] Generated PDF rendered and inspected locally
 [ ] Regression tests pass
 [ ] Git working tree clean
 [ ] Changes pushed to feature/rag-llm

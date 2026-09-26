@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import health, patients, analyses, clinical_support
+from app.api import health, patients, analyses, clinical_support, clinical_support_pdf
 from app.core.config import settings
 
 app = FastAPI(
@@ -23,6 +23,7 @@ app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(patients.router, prefix="/api/patients", tags=["patients"])
 app.include_router(analyses.router, prefix="/api/analyses", tags=["analyses"])
 app.include_router(clinical_support.router, prefix="/api/analyses", tags=["clinical-support"])
+app.include_router(clinical_support_pdf.router, prefix="/api/analyses", tags=["clinical-support"])
 
 # Create database tables on startup
 @app.on_event("startup")

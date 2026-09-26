@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getAnalysis, getAnalysisImageUrl, getClinicalSupport, getPatient } from '../../services/api';
+import { downloadClinicalSupportPdf, getAnalysis, getAnalysisImageUrl, getClinicalSupport, getPatient } from '../../services/api';
 import type { Analysis, ClinicalSupportResponse, Patient } from '../../types';
 import { formatDateOnly } from '../../utils/date';
 import './ClinicalSupport.css';
@@ -13,7 +13,9 @@ const ClinicalSupport = () => {
   const [clinicalSupport, setClinicalSupport] = useState<ClinicalSupportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
@@ -54,6 +56,30 @@ const ClinicalSupport = () => {
       console.error('Error generating clinical support:', err);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!analysisId || !clinicalSupport) return;
+
+    try {
+      setDownloadingPdf(true);
+      setPdfError(null);
+      const pdf = await downloadClinicalSupportPdf(parseInt(analysisId), clinicalSupport);
+      const downloadUrl = URL.createObjectURL(pdf);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      const safePatientCode = (patient?.patient_code || 'patient').replace(/[^a-zA-Z0-9._-]/g, '_');
+      link.download = `clinical_support_report_${safePatientCode}_${analysisId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+    } catch (err) {
+      setPdfError('Failed to download the PDF report. Please try again.');
+      console.error('Error downloading Clinical Support PDF:', err);
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -323,7 +349,15 @@ const ClinicalSupport = () => {
             >
               {generating ? 'Regenerating...' : 'Regenerate'}
             </button>
+            <button
+              className="button button-primary download-pdf-button"
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf || generating}
+            >
+              {downloadingPdf ? 'Preparing PDF...' : 'Download PDF Report'}
+            </button>
           </div>
+          {pdfError && <p className="pdf-error" role="alert">{pdfError}</p>}
         </div>
       )}
 
