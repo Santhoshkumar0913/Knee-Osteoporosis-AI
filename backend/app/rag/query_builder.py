@@ -32,12 +32,12 @@ class QueryBuilder:
             
             # Build query focusing on the diagnosis and key risk factors
             query_parts = [
-                f"Osteoporosis diagnosis: {predicted_diagnosis}",
+                f"DINOv2 image-model prediction (classification): {predicted_diagnosis}",
                 f"Age: {age} years",
                 f"Gender: {gender}",
                 f"BMI: {bmi:.1f}",
-                f"T-score: {t_score:.2f}",
-                f"Z-score: {z_score:.2f}"
+                f"Model-estimated T-score: {t_score:.2f}",
+                f"Model-estimated Z-score: {z_score:.2f}"
             ]
             
             # Add relevant risk factors if present
