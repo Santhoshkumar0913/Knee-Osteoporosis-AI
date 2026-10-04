@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Patient, PatientCreate, Analysis, AnalysisCreate, AnalysisListItem, ClinicalSupportResponse } from '../types';
+import type { Patient, PatientCreate, Analysis, AnalysisCreate, AnalysisListItem, AnalysisXaiResponse, ClinicalSupportResponse } from '../types';
 
 const API_BASE_URL = 'http://localhost:8000/api';
 
@@ -74,6 +74,11 @@ export const getAnalysis = async (analysisId: number): Promise<Analysis> => {
 
 export const getAnalysisImageUrl = (analysisId: number): string =>
   `${API_BASE_URL}/analyses/${analysisId}/image`;
+
+export const getAnalysisXai = async (analysisId: number): Promise<AnalysisXaiResponse> => {
+  const response = await api.get(`/analyses/${analysisId}/xai`);
+  return response.data;
+};
 
 export const deleteAnalysis = async (analysisId: number): Promise<void> => {
   await api.delete(`/analyses/${analysisId}`);

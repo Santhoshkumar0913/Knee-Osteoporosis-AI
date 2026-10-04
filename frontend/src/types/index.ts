@@ -60,6 +60,16 @@ export interface AnalysisListItem {
   z_score: number;
 }
 
+export interface AnalysisXaiResponse {
+  analysis_id: number;
+  predicted_class: number;
+  predicted_diagnosis: string;
+  confidence: number;
+  explanation_note: string;
+  research_only_warning: string;
+  overlay_image_data_url: string;
+}
+
 export interface PatientCreate {
   name: string;
 }
