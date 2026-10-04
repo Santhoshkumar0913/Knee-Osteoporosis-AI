@@ -109,6 +109,7 @@ class OpenRouterService:
                                 generated_text,
                                 retrieved_chunks,
                                 analysis_context,
+                                query=query,
                             )
                         except ValueError as e:
                             logger.warning(f"Structured parsing failed; using a safe explanation: {e}")
@@ -134,7 +135,8 @@ class OpenRouterService:
         analysis_context: Dict[str, Any]
     ) -> str:
         """Build the prompt for clinical support generation"""
-        prompt = f"""Provide evidence-based clinical support using the patient case and retrieved medical evidence below. Keep these four information sources distinct:
+        patient_context = self._format_patient_context(analysis_context)
+        prompt = f"""Provide evidence-based clinical support using the patient case and retrieved medical evidence below. Keep the DINOv2 image-model prediction, the application's model-estimated scores, and retrieved RAG evidence distinct.
 
 1. DINOv2 image-model prediction: {analysis_context.get('predicted_diagnosis', 'Unknown')} (predicted class {analysis_context.get('predicted_class', 'Unknown')}). Report this class as given.
 2. The application's model-estimated T-score: {analysis_context.get('t_score', 'Unknown')} (model estimate, not a measurement).
@@ -143,16 +145,22 @@ class OpenRouterService:
 
 The DINOv2 image-model prediction is the application's predicted class. Do not use either score to independently diagnose, reclassify, override, or contradict that prediction. Do not infer a diagnosis or severity category from either score. When mentioning either score, explicitly call it "the application's model-estimated T-score" or "the application's model-estimated Z-score" (or say "the model estimated ..."). Never describe either estimate as measured, as a DXA or QUS result, as a bone-density test result, or as a laboratory measurement. Do not imply that this application measured bone density.
 
-The explanation must explicitly distinguish the supplied DINOv2 prediction, both model-estimated scores, and the retrieved RAG evidence. Name each score using the model-estimated terminology above.
+EXPLANATION FIELD:
+The backend will prepend the deterministic DINOv2 prediction and model-estimated T-score/Z-score summary to your explanation. The JSON "explanation" value must contain only the additional RAG-grounded interpretation that follows that summary. Do not repeat the prediction/class, either score value, or the model-estimate/measurement clarification.
+
+Write 1–2 sentences, preferably 25–45 words. Do not mention or repeat either score or its value in the interpretation. Use retrieved evidence to explain a relevant meaning or limitation in the context of the supplied patient's age, gender, menopausal status, BMI, previous fracture, or other context only when that field is actually supplied and the evidence supports its relevance. In particular, refer to perimenopausal status only if the saved context says perimenopausal, and refer to a history of fracture only if the saved context says a previous fracture occurred. When both are present and retrieved evidence supports assessment, connect them to careful interpretation of the model estimates and further assessment of fracture risk or possible underlying causes. If evidence says adult categories should not be used alone for younger patients, state that limitation without saying they are "not validated." Explain meaning, not a literature summary. Do not include source names or publication years in the explanation; the application displays retrieved sources separately. Avoid generic filler. If evidence does not support a meaningful patient-specific interpretation, say so briefly without speculation.
 
 PATIENT CASE:
 {query}
+
+SAVED PATIENT CONTEXT:
+{patient_context or 'No additional patient context fields were supplied.'}
 
 RETRIEVED EVIDENCE:
 {evidence_context}
 
 INSTRUCTIONS:
-1. Explain the DINOv2 image-model prediction separately from both model-estimated scores and retrieved evidence.
+1. Keep the prediction, model-estimated scores, and retrieved evidence distinct in the response. For the Explanation, follow the EXPLANATION FIELD instructions and do not repeat the backend summary.
 2. Provide specific "What you can do now" recommendations
 3. List topics to "Talk to your doctor about"
 4. Include "Testing and follow-up considerations" if relevant
@@ -179,6 +187,7 @@ Return ONLY valid JSON. Do not include any text outside the JSON structure."""
         generated_text: str,
         retrieved_chunks: list,
         analysis_context: Optional[Dict[str, Any]] = None,
+        query: str = "",
     ) -> Dict[str, Any]:
         """Parse the generated response into structured format"""
         parsed = self._extract_json_object(generated_text)
@@ -215,8 +224,37 @@ Return ONLY valid JSON. Do not include any text outside the JSON structure."""
             return self._safe_score_claim_fallback(retrieved_chunks, analysis_context or {})
 
         if analysis_context:
+            interpretation = response["explanation"]
+            if self._contains_unsupported_family_history_claim(
+                interpretation, query, analysis_context
+            ) or self._contains_patient_diagnosis_claim(
+                interpretation
+            ) or self._contains_unsupported_patient_context_claim(
+                interpretation, analysis_context, retrieved_chunks
+            ):
+                interpretation = (
+                    "Retrieved evidence provides educational context; it does not establish a patient diagnosis."
+                )
+            elif not retrieved_chunks:
+                interpretation = (
+                    "No retrieved evidence supports a meaningful patient-specific interpretation."
+                )
+            elif self._has_perimenopausal_fracture_guidance(
+                analysis_context, retrieved_chunks
+            ):
+                interpretation = self._build_perimenopausal_fracture_interpretation(
+                    analysis_context
+                )
+            elif self._has_young_patient_category_guidance(
+                analysis_context, retrieved_chunks
+            ) and self._contains_score_reference_or_value(interpretation, analysis_context):
+                interpretation = (
+                    "Retrieved guidance indicates that standard adult categories should not be used alone "
+                    "to diagnose younger patients, so age-appropriate clinical interpretation is important."
+                )
+
             response["explanation"] = self._prepend_analysis_summary(
-                response["explanation"],
+                interpretation,
                 analysis_context,
                 retrieved_chunks,
             )
@@ -252,19 +290,177 @@ Return ONLY valid JSON. Do not include any text outside the JSON structure."""
         diagnosis = analysis_context.get("predicted_diagnosis", "the recorded class")
         t_score = self._format_model_estimate(analysis_context.get("t_score"))
         z_score = self._format_model_estimate(analysis_context.get("z_score"))
-        evidence_summary = (
-            "Retrieved RAG evidence is listed in the sources and provides the evidence context for the guidance below."
-            if retrieved_chunks
-            else "No RAG evidence was retrieved for this response."
-        )
         summary = (
-            f"DINOv2 image-model prediction: {diagnosis}. Separately, the application's "
-            f"model-estimated T-score is {t_score}, and the application's model-estimated "
-            f"Z-score is {z_score}. These values are model estimates, not measured "
-            "bone-density results, and neither score independently changes or overrides "
-            f"the DINOv2 prediction. {evidence_summary} "
+            f"The DINOv2 image model predicted {diagnosis}. The application's "
+            f"model-estimated T-score is {t_score} and model-estimated Z-score is "
+            f"{z_score}; these are model estimates, not measured bone-density results "
+            "and do not override the image-model prediction. "
         )
         return summary + explanation.strip()
+
+    @staticmethod
+    def _has_perimenopausal_fracture_guidance(
+        analysis_context: Dict[str, Any], retrieved_chunks: list
+    ) -> bool:
+        menopausal_status = str(analysis_context.get("menopausal_status", "")).strip().lower()
+        previous_fracture = str(analysis_context.get("previous_fracture", "")).strip().lower()
+        if menopausal_status not in {"perimenopausal", "peri-menopausal"} or previous_fracture != "yes":
+            return False
+
+        evidence = " ".join(
+            str(chunk.get("chunk_text", "")) for chunk in retrieved_chunks or []
+        ).lower()
+        return all((
+            re.search(r"\bfractur\w*\b", evidence),
+            re.search(r"\brisk\b", evidence),
+            re.search(r"\b(?:assess\w*|evaluat\w*)\b", evidence),
+            re.search(r"\b(?:underlying|secondary|cause\w*)\b", evidence),
+        ))
+
+    @staticmethod
+    def _build_perimenopausal_fracture_interpretation(
+        analysis_context: Dict[str, Any]
+    ) -> str:
+        factors = []
+        if str(analysis_context.get("menopausal_status", "")).strip().lower() in {
+            "perimenopausal", "peri-menopausal"
+        }:
+            factors.append("perimenopausal status")
+        if str(analysis_context.get("previous_fracture", "")).strip().lower() == "yes":
+            factors.append("history of fracture")
+        factor_text = " and ".join(factors)
+        return (
+            f"Given the saved {factor_text}, retrieved guidance supports careful clinical "
+            "interpretation of the model estimates and further assessment of fracture risk "
+            "and possible underlying causes."
+        )
+
+    @staticmethod
+    def _contains_unsupported_patient_context_claim(
+        text: str, analysis_context: Dict[str, Any], retrieved_chunks: list
+    ) -> bool:
+        text = text or ""
+        evidence = " ".join(
+            str(chunk.get("chunk_text", "")) for chunk in retrieved_chunks or []
+        )
+        if re.search(r"\bperi[- ]?menopaus\w*\b", text, re.IGNORECASE):
+            menopausal_status = str(
+                analysis_context.get("menopausal_status", "")
+            ).strip().lower()
+            if menopausal_status not in {"perimenopausal", "peri-menopausal"}:
+                return True
+
+        claims_fracture_history = re.search(
+            r"\b(?:history of|previous|prior|past)\s+(?:a\s+)?(?:fragility\s+)?fracture\b"
+            r"|\bfracture history\b",
+            text,
+            re.IGNORECASE,
+        )
+        if claims_fracture_history:
+            previous_fracture = str(
+                analysis_context.get("previous_fracture", "")
+            ).strip().lower()
+            if previous_fracture != "yes" or not re.search(
+                r"\bfractur\w*\b", evidence, re.IGNORECASE
+            ):
+                return True
+        return False
+
+    @staticmethod
+    def _has_young_patient_category_guidance(
+        analysis_context: Dict[str, Any], retrieved_chunks: list
+    ) -> bool:
+        try:
+            age = float(analysis_context.get("age"))
+        except (TypeError, ValueError):
+            return False
+        if age >= 50:
+            return False
+
+        evidence = " ".join(
+            str(chunk.get("chunk_text", "")) for chunk in retrieved_chunks or []
+        ).lower()
+        mentions_young_population = bool(
+            re.search(r"\b(?:younger|under\s+50|less\s+than\s+50|below\s+50)\b", evidence)
+        )
+        mentions_t_score = bool(re.search(r"\bt[ -]?score\b", evidence))
+        limits_adult_categories = bool(
+            re.search(r"\b(?:alone|should not|not be|do not|avoid)\b", evidence)
+        )
+        return mentions_young_population and mentions_t_score and limits_adult_categories
+
+    @classmethod
+    def _contains_score_reference_or_value(
+        cls, explanation: str, analysis_context: Dict[str, Any]
+    ) -> bool:
+        if re.search(r"\b[tz][ -]?scores?\b", explanation or "", re.IGNORECASE):
+            return True
+        values = (
+            cls._format_model_estimate(analysis_context.get("t_score")),
+            cls._format_model_estimate(analysis_context.get("z_score")),
+        )
+        return any(
+            value != "unavailable"
+            and re.search(rf"(?<!\d){re.escape(value)}(?!\d)", explanation or "")
+            for value in values
+        )
+
+    @staticmethod
+    def _format_patient_context(analysis_context: Dict[str, Any]) -> str:
+        """Render only saved clinical fields that have meaningful supplied values."""
+        fields = (
+            ("Age (years)", "age"),
+            ("Gender", "gender"),
+            ("Height (m)", "height"),
+            ("Weight (kg)", "weight"),
+            ("BMI", "bmi"),
+            ("Joint pain", "joint_pain"),
+            ("Number of pregnancies", "pregnancies"),
+            ("Menopausal status", "menopausal_status"),
+            ("Smoking", "smoking"),
+            ("Alcohol", "alcohol"),
+            ("Previous fracture", "previous_fracture"),
+            ("Long-term steroid use", "long_term_steroid_use"),
+        )
+        lines = []
+        for label, key in fields:
+            value = analysis_context.get(key)
+            if value is None or (isinstance(value, str) and not value.strip()):
+                continue
+            if isinstance(value, str) and value.strip().lower() in {"unknown", "not specified"}:
+                continue
+            lines.append(f"{label}: {value}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _contains_unsupported_family_history_claim(
+        text: str,
+        query: str,
+        analysis_context: Dict[str, Any],
+    ) -> bool:
+        if not re.search(r"\bfamily history\b", text or "", re.IGNORECASE):
+            return False
+        supplied_context = "\n".join(
+            str(analysis_context.get(key, ""))
+            for key in ("family_history", "family_history_of_osteoporosis")
+        )
+        return not re.search(
+            r"\bfamily history\b",
+            f"{query}\n{supplied_context}",
+            re.IGNORECASE,
+        )
+
+    @staticmethod
+    def _contains_patient_diagnosis_claim(text: str) -> bool:
+        return bool(
+            re.search(
+                r"\b(?:the\s+)?patient\s+(?:has|have|is having|was diagnosed with|has been diagnosed with)\s+(?:a diagnosis of\s+)?(?:osteopenia|osteoporosis)\b"
+                r"|\bdiagnosed with\s+(?:osteopenia|osteoporosis)\b"
+                r"|\bhaving\s+(?:osteopenia|osteoporosis)\b",
+                text or "",
+                re.IGNORECASE,
+            )
+        )
 
     @staticmethod
     def _contains_unsafe_score_claim(text: str) -> bool:
@@ -301,16 +497,15 @@ Return ONLY valid JSON. Do not include any text outside the JSON structure."""
         t_score = self._format_model_estimate(context.get("t_score"))
         z_score = self._format_model_estimate(context.get("z_score"))
         evidence_summary = (
-            "Retrieved RAG evidence is listed in the sources."
+            "No patient-specific RAG interpretation could be safely generated; retrieved sources are listed separately."
             if retrieved_chunks
-            else "No RAG evidence was retrieved for this response."
+            else "No RAG evidence was retrieved, so no patient-specific evidence interpretation is available."
         )
         explanation = (
-            f"The DINOv2 image model predicted {diagnosis}. Separately, the application's "
-            f"model-estimated T-score is {t_score}, and the application's model-estimated "
-            f"Z-score is {z_score}. These are model estimates; they are not measured "
-            "bone-density results and do not independently change or override the DINOv2 "
-            f"prediction. {evidence_summary} It does not replace the image-model prediction."
+            f"The DINOv2 image model predicted {diagnosis}. The application's "
+            f"model-estimated T-score is {t_score} and model-estimated Z-score is "
+            f"{z_score}; these are model estimates, not measured bone-density results "
+            f"and do not override the image-model prediction. {evidence_summary}"
         )
         return {
             "explanation": explanation,
@@ -388,20 +583,17 @@ Return ONLY valid JSON. Do not include any text outside the JSON structure."""
                 seen_sources.add(source_key)
 
         evidence_summary = (
-            "Retrieved RAG evidence is listed in the sources and is separate from the image-model prediction and score estimates."
+            "No patient-specific RAG interpretation was generated because OpenRouter is not configured; retrieved sources are listed separately."
             if sources
-            else "No RAG evidence was retrieved for this response."
+            else "No RAG evidence was retrieved, so no patient-specific evidence interpretation is available."
         )
         
         return {
             "explanation": (
-                f"The DINOv2 image model predicted {diagnosis}. Separately, the application's "
-                f"model-estimated T-score is {t_score:.2f}, and the application's "
-                f"model-estimated Z-score is {z_score:.2f}. These are model estimates from "
-                "the application's clinical models, not measured bone-density results, and "
-                "they do not independently change or override the DINOv2 prediction. "
-                f"{evidence_summary} The displayed ranges represent "
-                "empirical prediction-error margins."
+                f"The DINOv2 image model predicted {diagnosis}. The application's "
+                f"model-estimated T-score is {t_score:.2f} and model-estimated Z-score is "
+                f"{z_score:.2f}; these are model estimates, not measured bone-density "
+                f"results and do not override the image-model prediction. {evidence_summary}"
             ),
             "what_you_can_do_now": [
                 "Maintain a balanced diet rich in calcium and vitamin D",
