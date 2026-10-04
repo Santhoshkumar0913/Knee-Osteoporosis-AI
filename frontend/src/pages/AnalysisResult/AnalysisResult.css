@@ -5,7 +5,7 @@
 .results-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
+  align-items: stretch;
   gap: 18px;
   margin-bottom: 22px;
 }
@@ -24,17 +24,28 @@
   letter-spacing: -0.02em;
 }
 
-.xray-card { grid-column: 1 / -1; }
+.xray-card { grid-column: auto; }
 
-.original-xray-image {
+.original-xray-image,
+.gradcam-overlay-image {
   display: block;
   width: 100%;
-  max-height: min(58vh, 560px);
+  height: clamp(240px, 31vw, 400px);
   object-fit: contain;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #111c27;
 }
+
+.xai-card { border-top: 3px solid #77a7ca; }
+.xai-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 17px; padding-bottom: 12px; border-bottom: 1px solid #e7edf2; }
+.xai-card-heading h2 { margin: 0; padding: 0; border: 0; }
+.research-only-label { flex: 0 0 auto; margin: 2px 0 0; color: #75540e; font-size: 0.76rem; font-weight: 750; letter-spacing: 0.02em; text-align: right; text-transform: uppercase; }
+.xai-status { min-height: 44px; color: var(--muted); font-size: 0.88rem; }
+.xai-metadata { display: grid; gap: 9px; margin-top: 14px; color: #465d70; font-size: 0.83rem; line-height: 1.55; }
+.xai-metadata p { margin: 0; }
+.xai-metadata strong { color: var(--navy); }
+.xai-warning { padding: 11px 12px; border-left: 3px solid #d49b31; border-radius: 7px; color: #785516; background: #fff7e8; }
 
 .xray-error {
   padding: 16px;
@@ -75,20 +86,26 @@
 .disclaimer { margin-top: 14px; padding: 12px 14px; border-left: 3px solid #d49b31; border-radius: 7px; color: #785516; background: #fff7e8; font-size: 0.8rem; line-height: 1.55; }
 .disclaimer p { margin: 0; }
 
-.patient-details { display: grid; gap: 8px; }
+.patient-info-card { grid-column: 1 / -1; }
+.patient-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .detail-row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 12px; border: 1px solid #edf1f4; border-radius: 8px; background: #fafcfd; }
 .detail-row .label { color: var(--muted); font-size: 0.78rem; font-weight: 600; }
 .detail-row .value { color: #31485d; font-size: 0.81rem; font-weight: 650; text-align: right; overflow-wrap: anywhere; }
 
-.result-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.result-actions { display: flex; justify-content: space-between; gap: 10px; }
 
-@media (max-width: 900px) {
+@media (max-width: 1160px) {
   .results-grid { grid-template-columns: 1fr; }
-  .xray-card { grid-column: auto; }
+  .patient-info-card { grid-column: auto; }
+  .original-xray-image,
+  .gradcam-overlay-image { height: clamp(240px, 36vw, 420px); }
 }
 
 @media (max-width: 620px) {
   .result-card { padding: 18px 15px; }
+  .xai-card-heading { flex-wrap: wrap; }
+  .research-only-label { text-align: left; }
+  .patient-details { grid-template-columns: 1fr; }
   .analysis-page-heading .button { width: 100%; }
   .probability-bar { grid-template-columns: 90px minmax(40px, 1fr) 48px; gap: 7px; }
   .result-actions { flex-direction: column; }

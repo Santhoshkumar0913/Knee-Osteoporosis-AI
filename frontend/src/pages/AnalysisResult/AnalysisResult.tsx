@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getAnalysis, getAnalysisImageUrl } from '../../services/api';
-import type { Analysis } from '../../types';
+import { getAnalysis, getAnalysisImageUrl, getAnalysisXai } from '../../services/api';
+import type { Analysis, AnalysisXaiResponse } from '../../types';
 import { formatDateOnly } from '../../utils/date';
 import './AnalysisResult.css';
 
@@ -12,6 +12,11 @@ const AnalysisResult = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
+  const [xaiState, setXaiState] = useState<{
+    analysisId: number;
+    response?: AnalysisXaiResponse;
+    error?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!analysisId) return;
@@ -34,6 +39,31 @@ const AnalysisResult = () => {
 
     return () => { active = false; };
   }, [analysisId]);
+
+  useEffect(() => {
+    if (!analysis?.id) return;
+    let active = true;
+
+    getAnalysisXai(analysis.id)
+      .then((data) => {
+        if (active) setXaiState({ analysisId: analysis.id, response: data });
+      })
+      .catch((err) => {
+        if (!active) return;
+        setXaiState({
+          analysisId: analysis.id,
+          error: 'The experimental Grad-CAM visualization could not be generated.',
+        });
+        console.error('Error generating Grad-CAM visualization:', err);
+      });
+
+    return () => { active = false; };
+  }, [analysis?.id]);
+
+  const currentXaiState = xaiState?.analysisId === analysis?.id ? xaiState : null;
+  const xai = currentXaiState?.response ?? null;
+  const xaiError = currentXaiState?.error ?? null;
+  const xaiLoading = Boolean(analysis) && currentXaiState === null;
 
   const formatProbability = (value: number) => {
     return (value * 100).toFixed(2);
@@ -91,6 +121,36 @@ const AnalysisResult = () => {
               onError={() => setImageError(true)}
             />
           )}
+        </section>
+
+        <section className="result-card xai-card surface-card" aria-labelledby="xai-title">
+          <div className="xai-card-heading">
+            <h2 id="xai-title">Grad-CAM Visualization</h2>
+            <p className="research-only-label">Experimental · Research-only</p>
+          </div>
+          {xaiLoading ? (
+            <p className="xai-status" role="status">Generating experimental Grad-CAM visualization...</p>
+          ) : xaiError ? (
+            <p className="xray-error" role="status">{xaiError}</p>
+          ) : xai ? (
+            <>
+              <img
+                className="gradcam-overlay-image"
+                src={xai.overlay_image_data_url}
+                alt="Experimental Grad-CAM overlay for the saved original knee X-ray"
+                onError={() => setXaiState({
+                  analysisId: analysis.id,
+                  error: 'The experimental Grad-CAM visualization could not be displayed.',
+                })}
+              />
+              <div className="xai-metadata">
+                <p><strong>Model-selected prediction:</strong> {xai.predicted_diagnosis}</p>
+                <p><strong>Confidence:</strong> {(xai.confidence * 100).toFixed(2)}%</p>
+                <p>{xai.explanation_note}</p>
+                <p className="xai-warning">{xai.research_only_warning}</p>
+              </div>
+            </>
+          ) : null}
         </section>
 
         {/* X-ray Classification */}
