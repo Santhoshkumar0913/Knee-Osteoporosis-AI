@@ -1,15 +1,15 @@
 # PRD — Knee Osteoporosis AI
 
-## Unified As-Built Product Requirements Document
+## Unified V1 + Phase 2 + Phase 3 As-Built Product Requirements Document
 
 **Full project title:** Adaptive Multimodal AI and LLM Framework for Early Osteoporosis Screening and Evidence-Based Clinical Decision Support using Knee X-ray Images  
 **Product:** Knee Osteoporosis AI  
 **Repository:** `Santhoshkumar0913/Knee-Osteoporosis-AI`  
 **Current development branch:** `feature/rag-llm`  
-**Document type:** Unified V1 + Phase 2 as-built Product Requirements Document  
+**Document type:** Unified V1 + Phase 2 + Phase 3 as-built Product Requirements Document<br>
 **Status:** Current implementation specification
 
-> This document is the single project PRD. It consolidates the original V1 PRD, the Phase 2 RAG/LLM specification, and the verified implementation in the current feature branch. Where the original specifications and the implementation differ, the implementation is explicitly identified as the as-built behavior.
+> This document is the single authoritative project PRD. It consolidates the original V1 PRD, the Phase 2 RAG/LLM specification, the Phase 3 X-ray/XAI/PDF implementation, and the verified implementation in the current feature branch. Where the original specifications and implementation differ, this document records the as-built behavior.
 
 ---
 
@@ -29,6 +29,8 @@ The system contains four major layers:
 The V1 screening workflow uses a DINOv2-based image classifier to classify a knee X-ray into Normal, Osteopenia, or Osteoporosis. The predicted class is automatically inserted into the existing clinical feature vector used by a Random Forest T-score model and a Gradient Boosting Z-score model. The analysis, clinical context, and local X-ray reference are persisted in PostgreSQL/local storage.
 
 Phase 2 adds an on-demand Clinical Support feature. The backend loads a saved analysis, builds a concise evidence query, generates a BGE embedding, retrieves 3–5 relevant passages from the approved local medical corpus using PostgreSQL/pgvector, sends permitted case context plus retrieved evidence to OpenRouter, parses the structured response, and returns it to the Clinical Support UI.
+
+Phase 3 adds controlled access to the saved original X-ray, an on-demand experimental Grad-CAM endpoint and Analysis Result visualization, and an on-demand in-memory Clinical Support PDF download. Grad-CAM is research/explainability-only, is not confirmed anatomical disease localization, and is excluded from Clinical Support and PDF reports.
 
 Clinical Support is an evidence-grounded educational/decision-support layer. It does not replace professional diagnosis, densitometry, clinical judgement, or treatment decisions.
 
@@ -112,9 +114,21 @@ The application must preserve strict boundaries between model inference, evidenc
 - End-to-end verification
 - Responsive frontend styling
 
-### 4.3 Explicitly not implemented
+### 4.3 Implemented Phase 3 scope
 
-- XAI / Grad-CAM / heatmaps
+- Original saved X-ray endpoint: `GET /api/analyses/{analysis_id}/image`
+- Original X-ray displayed on Analysis Result and Clinical Support
+- On-demand experimental Grad-CAM endpoint: `GET /api/analyses/{analysis_id}/xai`
+- Experimental/research-only Grad-CAM overlay displayed on Analysis Result
+- On-demand Clinical Support PDF generation and download; generated in memory, not persistently stored
+- PDF includes the original saved X-ray and the currently displayed structured Clinical Support response
+- Grad-CAM intentionally excluded from Clinical Support and PDF
+- Clinical Support explanation safeguards distinguish the DINOv2 class, model-estimated scores, retrieved evidence, and only those patient-context details present in the saved analysis
+
+The Grad-CAM overlay is not clinical evidence and must not be described as confirmed anatomical disease localization. Its padding-attribution limitation is documented in Section 31.2.
+
+### 4.4 Explicitly not implemented
+
 - Completed patient-only classification branch
 - Validated probability-level multimodal fusion classifier
 - LLM fine-tuning
@@ -125,12 +139,12 @@ The application must preserve strict boundaries between model inference, evidenc
 - Arbitrary medical chat
 - Automatic web scraping
 - Authentication/login
-- PDF export
 - Cloud vector database
 - Second vector database
 - Cloud image storage
 - Multilingual support
 - Persisting generated Clinical Support reports
+- Permanent PDF report storage/archive (PDFs are generated and streamed on demand)
 
 ---
 
@@ -189,8 +203,9 @@ Calculate empirical ranges
 Save Analysis + Local X-ray reference
   ↓
 Analysis Result
-  ↓
-View Clinical Support
+  ├── GET /api/analyses/{analysis_id}/image → display original X-ray
+  ├── GET /api/analyses/{analysis_id}/xai → experimental Grad-CAM overlay (Analysis Result only)
+  └── View Clinical Support
   ↓
 POST /api/analyses/{analysis_id}/clinical-support
   ↓
@@ -213,6 +228,10 @@ Parse structured response
 Attach trusted source metadata + disclaimer
   ↓
 Clinical Support UI
+  ↓
+Optional POST /api/analyses/{analysis_id}/clinical-support/pdf
+  ↓
+In-memory PDF download (excludes Grad-CAM)
 ```
 
 ### 6.2 RAG vs LLM
@@ -326,6 +345,8 @@ Display:
 - model-estimated T-score and range;
 - model-estimated Z-score and range;
 - patient/clinical context;
+- saved original X-ray from `GET /api/analyses/{analysis_id}/image`;
+- experimental Grad-CAM overlay with model-selected prediction, confidence, explanation note, and research-only warning;
 - View Patient History;
 - View Clinical Support;
 - New Analysis.
@@ -340,6 +361,7 @@ Display:
 - Model-estimated T-score and empirical range
 - Model-estimated Z-score and empirical range
 - All clinical context fields
+- Original saved X-ray
 - Explanation
 - What You Can Do Now
 - Talk to Your Doctor About
@@ -349,6 +371,11 @@ Display:
 - Grounding Note
 - Exact disclaimer
 - Loading/error/retry/regenerate states
+- Grad-CAM is intentionally excluded from this page.
+
+### 8.8 Clinical Support PDF
+
+The Clinical Support page can download a PDF generated on demand from the saved analysis, saved original X-ray, and currently displayed structured Clinical Support response. The PDF is generated in memory and streamed; it is not permanently stored. It includes existing patient/analysis information, probabilities, model-estimated T/Z scores and ranges, clinical context, retrieved sources, grounding note, and disclaimer. It excludes Grad-CAM.
 
 ---
 
@@ -847,6 +874,14 @@ The LLM should:
 9. Avoid presenting model estimates as direct clinical measurements.
 10. Direct medical decisions to a doctor.
 
+Additional implemented grounding boundaries:
+
+- The DINOv2 predicted class remains distinct from both clinical-model estimates. T-score/Z-score estimates cannot reclassify, override, or contradict that image-model prediction.
+- T-score and Z-score values are model estimates, not measured DXA, QUS, bone-density test, or laboratory results.
+- Patient-specific details such as menopausal status and previous fracture may be discussed only when present in the saved analysis context and relevant retrieved evidence.
+- Displayed source organizations and years come exclusively from retrieved chunk metadata.
+- Clinical Support and PDF content do not use Grad-CAM as evidence.
+
 ---
 
 ## 22. Privacy and Security
@@ -951,7 +986,9 @@ Knee-Osteoporosis-AI/
 │   │   │   ├── health.py
 │   │   │   ├── patients.py
 │   │   │   ├── analyses.py
-│   │   │   └── clinical_support.py
+│   │   │   ├── clinical_support.py
+│   │   │   ├── clinical_support_pdf.py
+│   │   │   └── xai.py
 │   │   ├── core/
 │   │   │   └── config.py
 │   │   ├── db/
@@ -969,6 +1006,7 @@ Knee-Osteoporosis-AI/
 │   │       ├── image_model.py
 │   │       ├── clinical_model.py
 │   │       ├── prediction_service.py
+│   │       ├── pdf_service.py
 │   │       └── storage_service.py
 │   ├── models/
 │   ├── tests/
@@ -1019,6 +1057,9 @@ GET    /api/analyses/{analysis_id}
 DELETE /api/analyses/{analysis_id}
 
 POST   /api/analyses/{analysis_id}/clinical-support
+GET    /api/analyses/{analysis_id}/image
+GET    /api/analyses/{analysis_id}/xai
+POST   /api/analyses/{analysis_id}/clinical-support/pdf
 ```
 
 ### Main responsibilities
@@ -1026,6 +1067,12 @@ POST   /api/analyses/{analysis_id}/clinical-support
 `POST /api/analyses` performs the saved V1 analysis workflow with multipart image upload and clinical inputs.
 
 `POST /api/analyses/{analysis_id}/clinical-support` generates Clinical Support on demand from the saved analysis.
+
+`GET /api/analyses/{analysis_id}/image` serves that analysis's saved original X-ray through controlled per-analysis path resolution.
+
+`GET /api/analyses/{analysis_id}/xai` generates an experimental Grad-CAM overlay on demand. It verifies that the generated model-selected class matches the saved prediction. The result is displayed on Analysis Result only and is not stored.
+
+`POST /api/analyses/{analysis_id}/clinical-support/pdf` streams an in-memory PDF using the currently displayed Clinical Support response and saved original X-ray. Grad-CAM is excluded.
 
 ---
 
@@ -1207,20 +1254,21 @@ is committed to Git.
 
 ## 30. Verified Final State
 
-The latest project verification reported:
+The latest recorded project verification reported:
 
 ```text
 V1 regression                  PASS
 Clinical Support real flow    PASS
 RAG verification               PASS
 Security/privacy               PASS
-Parser tests                   5/5 PASS
+Full backend suite             44 passed, 61 subtests passed
+Clinical Support grounding     PASS (focused tests)
 Frontend build                 PASS
 Frontend lint                  PASS with existing warnings
 Git diff check                  PASS
 ```
 
-The verified environment also reported:
+The verified RAG environment also reported:
 
 ```text
 5 retrieved chunks in the verified Clinical Support flow
@@ -1239,9 +1287,14 @@ These are implementation verification results, not clinical validation metrics.
 
 LlamaIndex is specified in the original Phase 2 requirements and its dependencies are present, but the active retrieval implementation uses direct SQLAlchemy + pgvector similarity search.
 
-### 31.2 No XAI runtime
+### 31.2 Experimental Grad-CAM visualization
 
-The current system does not generate image heatmaps or explain DINOv2 predictions visually.
+The Analysis Result page can generate an on-demand Grad-CAM overlay for the
+saved X-ray. This is an experimental research/explainability visualization,
+not clinical evidence or confirmed anatomical disease localization. Phase 3C
+found inconsistent attribution to letterbox padding and measurable padding
+sensitivity in at least one sample. Grad-CAM remains excluded from Clinical
+Support and PDF reports.
 
 ### 31.3 No validated multimodal fusion classifier
 
@@ -1267,7 +1320,7 @@ Potential future work includes:
 
 - patient-data classification branch;
 - validated probability-level multimodal fusion;
-- explainable AI / Grad-CAM or other validated visual explanations;
+- clinical validation of the experimental Grad-CAM visualization or other visual explanation methods;
 - stronger quantitative retrieval evaluation;
 - expert review protocols for Clinical Support;
 - external clinical validation;
@@ -1282,7 +1335,9 @@ These are future extensions and are not part of the current implemented product.
 
 > A knee X-ray is uploaded through the React application together with the required clinical information. FastAPI validates the request and runs the DINOv2 image classifier, which produces a three-class screening result with class probabilities and confidence. The predicted class is automatically inserted into the fixed V1 clinical feature vector used by the T-score Random Forest and Z-score Gradient Boosting models. The system calculates empirical T/Z prediction-error ranges, saves the analysis and local image reference, and displays the result.
 >
-> For Clinical Support, the user explicitly opens the feature for a saved analysis. The backend loads the analysis and clinical context, builds a concise evidence query, creates a BGE embedding, and performs cosine-similarity retrieval against the approved medical corpus stored in PostgreSQL/pgvector. Three to five relevant evidence chunks are combined with permitted case context in a grounded OpenRouter prompt. The backend parses the returned structured response, derives source information from retrieved metadata, and sends the result to the Clinical Support UI with the grounding note and exact medical-safety disclaimer. The system supports screening and evidence review; it does not replace professional diagnosis or treatment decisions.
+> The saved original X-ray is served to Analysis Result and Clinical Support by a controlled API. Analysis Result also offers an on-demand experimental Grad-CAM overlay with a research-only warning. Grad-CAM remains an explainability experiment, not confirmed anatomical disease localization, and is excluded from Clinical Support and PDF.
+>
+> For Clinical Support, the user explicitly opens the feature for a saved analysis. The backend loads the analysis and clinical context, builds a concise evidence query, creates a BGE embedding, and performs cosine-similarity retrieval against the approved medical corpus stored in PostgreSQL/pgvector. Three to five relevant evidence chunks are combined with permitted case context in a grounded OpenRouter prompt. The backend parses the returned structured response, derives source information from retrieved metadata, and sends the result to the Clinical Support UI with the grounding note and exact medical-safety disclaimer. The current response and saved original X-ray can be included in an on-demand in-memory PDF download. The system supports screening and evidence review; it does not replace professional diagnosis or treatment decisions.
 
 ---
 
@@ -1315,6 +1370,12 @@ Structured Clinical Support
    ↓
 Human review
 ```
+
+The saved original X-ray is also served to Analysis Result and Clinical Support.
+An experimental Grad-CAM overlay is generated on demand for Analysis Result
+only and remains research/explainability-only. The Clinical Support response
+currently displayed can be downloaded as an in-memory PDF with the saved
+original X-ray; Grad-CAM is excluded from that report.
 
 The core design deliberately keeps four responsibilities separate:
 

@@ -1,9 +1,10 @@
-# Phase 3 — X-ray Visualization, Grad-CAM XAI, and PDF Clinical Support
+# Phase 3 — As-Built X-ray Visualization, Experimental Grad-CAM, and PDF Clinical Support
 
 ## 1. Purpose
 
-This document defines the next implementation phase for the
-**Knee Osteoporosis AI** project.
+This document tracks the implemented Phase 3 state for the
+**Knee Osteoporosis AI** project, including verification, research limitations,
+and features intentionally excluded from Clinical Support and PDF.
 
 It is subordinate to the root `PRD.md`.
 
@@ -15,66 +16,70 @@ README.md
 ```
 
 The root `PRD.md` is the single authoritative product specification for the
-whole project. This file is the Phase 3 implementation plan and tracker.
+whole project. This file is the Phase 3 as-built implementation tracker.
 
 ---
 
-## 2. Phase 3 Scope
+## 2. Phase 3 Implemented Scope and Status
 
-Phase 3 adds:
-
-1. Original saved knee X-ray display.
-2. Grad-CAM explainability for the existing DINOv2 classifier.
-3. X-ray + Grad-CAM visualization.
-4. XAI information in Analysis Result.
-5. XAI information in Clinical Support.
-6. PDF Clinical Support report generation.
-7. PDF report download from the Clinical Support page.
+Phase 3 implementation state:
 
 ### Current Phase 3 status
 
-```text
-Original saved X-ray API        PHASE 3D IMPLEMENTED
-Original X-ray in Analysis Result PHASE 3E IMPLEMENTED
-Original X-ray in Clinical Support IMPLEMENTED
-Grad-CAM prototype              IMPLEMENTED; research only
-Grad-CAM user-facing explanation NOT VALIDATED / NOT APPROVED
-X-ray + heatmap visualization  NOT IMPLEMENTED
-XAI API                        TEMPORARILY DEFERRED
-Clinical Support XAI UI        NOT IMPLEMENTED
-PDF generation                 PHASE 3I IMPLEMENTED (ON DEMAND)
-PDF download                   PHASE 3J IMPLEMENTED
-PDF contains Grad-CAM          EXCLUDED; XAI REMAINS RESEARCH-ONLY
-Clinical Support grounding correction IMPLEMENTED; unit and live LLM checks passed
-```
+| Phase 3 item | As-built status |
+|---|---|
+| DINOv2 runtime verification | Verified against the existing checkpoint and runtime model |
+| One-image Grad-CAM prototype | Implemented; hooks removed in `finally`; model forwards serialized |
+| Grad-CAM validation | Research visual validation completed; padding attribution is inconsistent and padding sensitivity changed at least one sample's prediction |
+| Original X-ray API | Implemented and verified: `GET /api/analyses/{analysis_id}/image` |
+| Original X-ray UI | Implemented in Analysis Result and Clinical Support |
+| XAI API | Implemented on demand: `GET /api/analyses/{analysis_id}/xai` |
+| Grad-CAM UI | Implemented experimentally on Analysis Result only, with research-only warning |
+| Clinical Support Grad-CAM | Intentionally excluded |
+| Clinical Support grounding correction/refinement | Implemented; model estimates remain distinct from the DINOv2 class; terminology and saved-context grounding safeguards are covered by tests |
+| PDF generation/download | Implemented on demand in memory from the currently displayed Clinical Support response and saved original X-ray |
+| Grad-CAM in PDF | Intentionally excluded |
+
+This tracker distinguishes implementation from validation: Grad-CAM is
+implemented and displayed experimentally, but it has not been clinically
+validated and must not be represented as confirmed anatomical disease
+localization.
 
 ### Current implementation status
 
 Phase 3A runtime verification and Phase 3B one-image Grad-CAM prototype are
-complete. Phase 3C was completed as research validation. It found inconsistent
+complete. Phase 3C research validation is complete. It found inconsistent
 Grad-CAM attribution to letterbox padding, including disproportionate padding
 attribution on some samples and measurable prediction sensitivity to padding
-in at least one sample. The current Grad-CAM output is therefore not a
-validated user-facing explanation and must not be exposed in the product UI or
-described as clinical evidence. Keep the prototype intact for future research
-and validation.
+in at least one sample. The comparison covered `blocks[5].norm1`,
+`blocks[8].norm1`, `blocks[10].norm1`, and `blocks[11].norm1` across multiple
+representative X-rays, with content-region and padding attribution inspected.
+The visualization remains experimental and is not clinical evidence or
+confirmed anatomical disease localization. The only user-visible use is the
+explicitly research-only overlay on Analysis Result. Keep the full attribution,
+including padding attribution, visible.
 
 Phase 3D added the controlled original saved X-ray API. Phase 3E integrates
-only that original image into Analysis Result. The original saved X-ray is also
-shown in Clinical Support. The XAI API and all user-facing Grad-CAM integration
-are temporarily deferred because Phase 3C found inconsistent attribution to
-letterbox padding. Do not expose current Grad-CAM through an API, Analysis
-Result, Clinical Support, or PDF.
+that original image into Analysis Result, and the same original image is shown
+in Clinical Support. Phase 3F implements an on-demand XAI API; Phase 3G shows
+its experimental Grad-CAM overlay only on Analysis Result. Clinical Support
+has no Grad-CAM UI, and PDF reports exclude Grad-CAM by design. The Phase 3C
+padding-attribution limitation and research-only warning remain visible with
+the Analysis Result visualization.
 
 The Clinical Support grounding correction labels the DINOv2 class, both
 clinical-model score estimates, and retrieved RAG evidence separately. The
 retrieval query and LLM instructions name T/Z values as model estimates. The
 response parser fails closed to a deterministic, analysis-grounded explanation
 when generated content describes an estimate as a measurement or contradicts
-the recorded DINOv2 class. Unit tests pass. A live OpenRouter generation using
-synthetic, non-patient validation data also passed the terminology checks. The
-local API server was unavailable, so the full HTTP endpoint and pgvector
-retrieval path were not exercised in that live check.
+the recorded DINOv2 class. Explanation generation also uses saved clinical
+context and retrieved evidence for cautious interpretation, without inventing
+perimenopausal status, fracture history, or other patient facts. Unit tests pass.
+An earlier live OpenRouter generation used synthetic, non-patient validation
+data to check terminology. The latest context-dependent Explanation refinement
+is covered by backend tests; it has not been rechecked through a live
+OpenRouter request. The local API server was unavailable during the synthetic
+check, so the full HTTP endpoint and pgvector retrieval path were not exercised.
 
 Phase 3I/3J generates the Clinical Support PDF on demand in memory. The
 Clinical Support page posts its currently displayed response; the PDF endpoint
@@ -82,8 +87,8 @@ loads the saved analysis, patient, and original X-ray and does not call the LLM
 again or persist the PDF. The report includes only existing patient and
 analysis fields, probabilities, model-estimated scores and ranges, the current
 Clinical Support sections, actual source metadata, grounding note, and
-disclaimer. Grad-CAM is deliberately excluded while user-facing XAI remains
-deferred.
+disclaimer. Grad-CAM remains deliberately excluded from the PDF; the
+experimental Analysis Result visualization is not Clinical Support evidence.
 
 ---
 
@@ -268,14 +273,15 @@ controlled per-analysis image serving; no static image mount
 `get_full_image_path()` exists as a helper but is not currently used to serve
 images to the frontend.
 
-The Analysis Result loads this endpoint using the analysis ID. The original
-image is displayed without generating or displaying Grad-CAM.
+Analysis Result and Clinical Support load this endpoint using the analysis ID.
+Analysis Result separately requests the experimental Grad-CAM endpoint; the
+original image endpoint itself serves only the saved original X-ray.
 
 ---
 
-# 6. Phase 3 Architecture
+# 6. As-Built Phase 3 Architecture
 
-Target workflow:
+Current workflow (the Grad-CAM branch is separate from Clinical Support and PDF):
 
 ```text
 Saved Analysis
@@ -284,27 +290,34 @@ Saved Analysis
     ├── Z-score
     ├── Clinical Context
     └── Original X-ray
+             ├── GET /api/analyses/{analysis_id}/image
+             │        ├── Analysis Result
+             │        └── Clinical Support
+             └── GET /api/analyses/{analysis_id}/xai
+                      ↓
+                 Grad-CAM overlay
+                      ↓
+              Analysis Result only
+
+Clinical Support response currently displayed
              ↓
-        XAI Service
+POST /api/analyses/{analysis_id}/clinical-support/pdf
              ↓
-          Grad-CAM
-             ↓
-   Original + Heatmap Overlay
-             ↓
-      Analysis Result
-             ↓
-      Clinical Support
-             ↓
-        PDF Report
+     In-memory PDF download
+     (original X-ray included;
+      Grad-CAM excluded)
 ```
 
 ---
 
 # 7. Phase 3A — Runtime DINOv2 Verification
 
-## Objective
+## Verified Runtime Result
 
-Verify the exact runtime ViT architecture before writing Grad-CAM code.
+The existing model construction and checkpoint were instantiated and inspected
+at runtime before the Grad-CAM prototype was implemented. The verified model
+is DINOv2 ViT-Small/14 with 518 × 518 input, embedding dimension 384, and
+three output classes.
 
 ## Requirements
 
@@ -334,44 +347,31 @@ special-token count
 patch grid
 ```
 
-The expected patch grid may be:
+The verified patch grid is:
 
 ```text
 518 / 14 = 37
 37 × 37 = 1369 patch positions
 ```
 
-But this must be verified at runtime.
-
-## Candidate target layer
-
-A late transformer normalization layer such as:
+The selected and runtime-verified target layer is:
 
 ```text
-backbone.blocks[-1].norm1
+backbone.blocks[11].norm1
 ```
-
-is a candidate.
-
-It is NOT approved until its actual runtime activation shape is inspected.
-
-## Required output from verification
-
-Record:
 
 ```text
-Exact target layer:
-Activation shape:
-Total tokens:
-Patch tokens:
-Class token:
-Register/special tokens:
-Embedding dimension:
-Patch grid:
-Required reshape:
+Activation shape: [1, 1370, 384]
+Total tokens: 1370
+Patch tokens: 1369
+Class tokens: 1
+Register tokens: 0
+Patch grid: 37 × 37
+Grad-CAM reshape: [1, 1370, 384] → remove class token → [1, 1369, 384] → [1, 37, 37, 384] → [1, 384, 37, 37]
 ```
 
-Stop if the model/checkpoint cannot be instantiated correctly.
+No model, checkpoint, preprocessing, or classifier changes were made for this
+verification.
 
 ---
 
@@ -434,30 +434,25 @@ Do not hard-code assumptions without verification.
 
 ---
 
-# 9. Grad-CAM Implementation
+# 9. Grad-CAM Implementation — As Built
 
-Preferred initial approach:
+The implementation uses:
 
 ```text
 small custom Grad-CAM implementation
 ```
 
-Reason:
+The custom implementation keeps:
 
-- ViT token-to-spatial conversion is explicit.
-- target class selection remains visible.
-- hook lifetime can be controlled.
-- request-scoped activation/gradient state can be managed explicitly.
-- unnecessary dependency growth is avoided.
-
-An established Grad-CAM package may be used instead if runtime testing shows
-it is safer and integrates cleanly.
-
-Do not add a new dependency merely because it is convenient.
+- ViT token-to-spatial conversion explicit;
+- target class selection tied to the model-selected class;
+- hook lifetime scoped and removed in `finally`;
+- activation/gradient state request-scoped;
+- no additional Grad-CAM dependency.
 
 ---
 
-# 10. Hook and Concurrency Requirements
+# 10. Hook and Concurrency Behavior
 
 The current DINOv2 model is exposed through a process-level singleton.
 
@@ -483,97 +478,69 @@ Normal prediction behavior must remain unaffected.
 
 ---
 
-# 11. Phase 3D — Original X-ray Endpoint
+# 11. Phase 3D — Original X-ray Endpoint (Implemented and Verified)
 
-Add a controlled endpoint following existing API conventions.
-
-Suggested:
+Implemented endpoint:
 
 ```text
 GET /api/analyses/{analysis_id}/image
 ```
 
-Requirements:
-
-- validate analysis exists;
-- verify an image path is present;
-- resolve the image safely;
-- verify the target file exists;
-- return the image;
-- support PNG/JPG/JPEG/WEBP;
-- reject path traversal;
-- do not expose raw filesystem paths;
-- use appropriate HTTP errors.
-
-Do not expose arbitrary storage files.
+The route validates the analysis and image, resolves the per-analysis image
+through the storage service, supports PNG/JPG/JPEG/WEBP, and does not expose
+arbitrary storage files or raw filesystem paths.
 
 ---
 
 # 11A. Phase 3E — Original X-ray in Analysis Result
 
-Use the completed endpoint:
+The completed Analysis Result integration uses:
 
 ```text
 GET /api/analyses/{analysis_id}/image
 ```
 
-Show only the saved original X-ray in the existing Analysis Result page. Keep
-image loading failure local to the image section so the saved analysis result
-remains visible. Do not generate or display Grad-CAM in this phase.
+Phase 3E displayed the saved original X-ray and kept image errors local to the
+image section. Phase 3G later added the separate experimental Grad-CAM panel.
 
 ---
 
-# 12. Phase 3F — XAI Endpoint (Temporarily Deferred)
+# 12. Phase 3F — XAI Endpoint (Implemented; Research Only)
 
-Suggested:
+Implemented endpoint:
 
 ```text
 GET /api/analyses/{analysis_id}/xai
 ```
 
-The exact response contract should follow project conventions.
+The endpoint resolves the original image through the existing storage service,
+generates Grad-CAM on demand, verifies the model-selected class against the
+saved analysis prediction, and returns one PNG data URL. It does not accept a
+user-selected class, expose filesystem paths, or store generated files.
 
-Possible shape:
+Implemented response shape:
 
 ```json
 {
   "analysis_id": 1,
-  "predicted_class": "Osteoporosis",
+  "predicted_class": 3,
+  "predicted_diagnosis": "Osteoporosis",
   "confidence": 0.818,
-  "original_image_url": "/api/analyses/1/image",
-  "heatmap_url": "/api/analyses/1/xai/heatmap",
-  "overlay_url": "/api/analyses/1/xai/overlay",
-  "explanation_note": "Grad-CAM visualization showing image regions that contributed to the model's selected prediction."
+  "overlay_image_data_url": "data:image/png;base64,...",
+  "explanation_note": "Grad-CAM visualization showing image regions that contributed to the model's selected prediction.",
+  "research_only_warning": "This visualization is for research/explainability purposes only and is not a confirmed anatomical disease localization."
 }
 ```
 
-Do not create duplicate endpoints unnecessarily.
-
-The final contract should be chosen after inspecting the current API style.
-
 ---
 
-# 13. XAI Artifact Handling
+# 13. XAI Artifact Handling — As Built
 
 The original X-ray must remain unchanged.
 
-Generated XAI artifacts may use a controlled location such as:
-
-```text
-storage/xai/<patient_code>/<analysis_id>/
-```
-
-Possible outputs:
-
-```text
-heatmap
-overlay
-```
-
-Prefer on-demand generation unless the implementation demonstrates a clear
-benefit to persistent caching.
-
-Do not save sensitive or unnecessary duplicate information.
+The XAI endpoint generates the overlay on demand and returns it as a PNG data
+URL. Heatmaps and overlays are not written to persistent storage. The saved
+original X-ray is resolved through the existing per-analysis storage service.
 
 ---
 
@@ -600,22 +567,16 @@ anatomical pathology map.
 
 ---
 
-# 15. Phase 3G — Analysis Result XAI UI (Temporarily Deferred)
+# 15. Phase 3G — Analysis Result XAI UI (Implemented; Experimental/Research Only)
 
-This phase is temporarily deferred. The requirements below describe the
-future XAI UI only; do not expose the current Grad-CAM prototype until the
-padding-attribution limitation has been addressed and the result has been
-revalidated.
+The Analysis Result page keeps its Original X-ray section and shows the
+experimental Grad-CAM overlay beside it. Loading and errors remain local to
+the XAI section so ordinary analysis results and actions remain usable. The
+page shows the model-selected prediction, confidence, exact explanation note,
+and exact research-only warning. A failure to match the saved prediction
+returns a conflict instead of displaying a mismatched explanation.
 
-Update the existing:
-
-```text
-frontend/src/pages/AnalysisResult/
-```
-
-Add a clear X-ray section.
-
-Recommended:
+The implemented Analysis Result contains:
 
 ```text
 X-ray Analysis
@@ -627,7 +588,8 @@ X-ray Analysis
 └────────────────────┴────────────────────┘
 ```
 
-Below the visualization:
+The visualization displays this explanation note and the research-only
+warning from the API response:
 
 ```text
 Grad-CAM visualization showing image regions that contributed
@@ -657,22 +619,14 @@ New Analysis
 
 ---
 
-# 16. Phase 3H — Clinical Support UI
+# 16. Phase 3H — Clinical Support XAI (Intentionally Excluded)
 
-Update:
+Grad-CAM is intentionally excluded from Clinical Support. The page displays
+the original saved X-ray and structured Clinical Support, but no heatmap or
+XAI explanation. The same exclusion applies to PDF reports. Grad-CAM must not
+be treated as retrieved evidence or used to generate Clinical Support.
 
-```text
-frontend/src/pages/ClinicalSupport/
-```
-
-Add:
-
-```text
-Original X-ray
-Grad-CAM Overlay
-```
-
-Keep the current structured Clinical Support sections:
+The implemented Clinical Support sections remain:
 
 ```text
 Explanation
@@ -683,7 +637,7 @@ Treatment Information
 Sources
 ```
 
-Also retain:
+The page also retains:
 
 ```text
 Grounding Note
@@ -691,7 +645,7 @@ Disclaimer
 Regenerate
 ```
 
-Add:
+The page provides:
 
 ```text
 Download PDF Report
@@ -718,6 +672,11 @@ model-estimated T-score
 model-estimated Z-score
 ```
 
+Both values are estimates from the application's clinical models. Patient
+context may be discussed only when it is present in the saved analysis and
+supported by retrieved evidence. Retrieved source labels are constructed from
+retrieved chunk metadata, not generated citations.
+
 Never describe model-estimated T/Z values as:
 
 ```text
@@ -736,7 +695,7 @@ the model-estimated T/Z values.
 
 ---
 
-# 18. Phase 3I — PDF Generation
+# 18. Phase 3I — PDF Generation (Implemented)
 
 The dedicated PDF service is implemented at:
 
@@ -744,7 +703,7 @@ The dedicated PDF service is implemented at:
 backend/app/services/pdf_service.py
 ```
 
-Use on-demand generation.
+Generation runs on demand.
 
 Implemented flow:
 
@@ -756,13 +715,13 @@ POST /api/analyses/{analysis_id}/clinical-support/pdf with the currently display
 → stream response without permanent storage
 ```
 
-Avoid permanent PDF storage unless later requirements justify it.
+The generated PDF is streamed and not permanently stored.
 
 ---
 
 # 19. PDF Content
 
-The report should contain:
+The implemented report contains:
 
 ## Header
 
@@ -773,7 +732,7 @@ Clinical Support Report
 
 ## 1. Patient Information
 
-Use only real patient fields:
+It uses only existing patient fields:
 
 ```text
 Patient ID
@@ -784,7 +743,7 @@ Gender
 Analysis Date
 ```
 
-Do NOT include:
+It does not include:
 
 ```text
 Phone
@@ -814,8 +773,8 @@ Long-term Steroid Use
 Original X-ray
 ```
 
-Do not include Grad-CAM in the PDF while the current attribution remains
-research-only and user-facing XAI is deferred.
+Do not include Grad-CAM in the PDF. The Analysis Result visualization remains
+research-only and is not Clinical Support evidence.
 
 ## 4. Model Prediction
 
@@ -849,17 +808,17 @@ Treatment Information
 
 ## 7. Evidence Sources
 
-Use actual retrieved metadata.
+The displayed source list uses actual retrieved metadata.
 
 Do not invent citations.
 
 ## 8. Grounding Note
 
-Use the Clinical Support grounding note.
+The report includes the Clinical Support grounding note.
 
 ## 9. Disclaimer
 
-Use:
+The report includes this disclaimer:
 
 ```text
 AI-assisted guidance for informational purposes.
@@ -873,7 +832,7 @@ Discuss medical decisions with your doctor.
 
 Current Clinical Support is generated on demand and is not stored.
 
-Therefore the preferred behavior is:
+The implemented behavior is:
 
 ```text
 Clinical Support generated
@@ -888,13 +847,6 @@ PDF uses the response currently displayed
 The implemented download posts that displayed structured response to the PDF
 endpoint. The endpoint uses it as-is with the saved analysis and original
 image; it does not regenerate Clinical Support and keeps the PDF in memory.
-
-Do not silently call the LLM again for the same PDF when the current response
-is already available.
-
-If a future implementation needs the PDF endpoint to work independently
-without a current frontend response, define that behavior explicitly and
-document the possibility of regenerated content.
 
 ---
 
@@ -935,35 +887,20 @@ Do not display the time unless a later requirement explicitly needs it.
 
 # 23. PDF Dependency
 
-Current backend dependencies include `pypdf`, but:
+The backend uses ReportLab for report generation. `pypdf` remains used for
+RAG document text extraction and is not the report-generation library.
 
-```text
-pypdf = PDF text extraction
-```
-
-It is NOT a PDF report-generation solution.
-
-Before implementation, choose a suitable PDF-generation method and add only
-the required dependency.
-
-Possible approaches may include:
-
-```text
-ReportLab
-HTML/CSS → PDF renderer
-```
-
-Phase 3 uses ReportLab, added as `reportlab>=4.2.0` in
+ReportLab is declared as `reportlab>=4.2.0` in
 `backend/requirements.txt`. The endpoint streams an in-memory PDF and does not
 write a permanent report file.
 
 ---
 
-# 24. Testing Requirements
+# 24. Verification Coverage and Results
 
 ## Runtime DINOv2
 
-Test:
+Verified:
 
 - checkpoint loads;
 - target layer exists;
@@ -973,7 +910,7 @@ Test:
 
 ## Grad-CAM
 
-Test:
+Covered by implementation and endpoint tests:
 
 - correct target class;
 - finite values;
@@ -985,7 +922,7 @@ Test:
 
 ## Image endpoint
 
-Test:
+Covered by endpoint tests:
 
 - valid analysis;
 - missing analysis;
@@ -999,32 +936,27 @@ Phase 3C validation found inconsistent attribution to the artificial
 letterbox padding. Some samples assigned a disproportionate share of
 attribution to padding, and a padding sensitivity experiment measurably
 changed the prediction for at least one sample. Preserve full attribution for
-research inspection; do not silently mask padding or expose the current
-Grad-CAM as a validated user-facing explanation. This finding is not a claim
-of clinical validity.
+research inspection; the Analysis Result UI retains the full attribution and
+displays a research-only warning. This research visualization is not a
+validated clinical explanation and is not confirmed anatomical disease
+localization. No clinical validation is claimed.
 
 ## PDF
 
-Test:
+Coverage includes valid reports, required sections, original X-ray inclusion,
+Grad-CAM exclusion, the displayed Clinical Support response, source metadata,
+disclaimer, and error handling.
 
-- valid report;
-- required sections;
-- X-ray included;
-- Grad-CAM excluded while research-only;
-- Clinical Support included;
-- sources included;
-- disclaimer included;
-- error handling.
-
-Current focused verification: 16 Clinical Support tests and 6 PDF service/API
-tests pass. A synthetic QA report was rendered locally as a 3-page PDF and
-visually inspected. The local backend HTTP server was unavailable, so the
-download endpoint was tested directly with a database stub and a temporary
-saved-image fixture.
+Current verification: the full backend suite passes (44 tests and 61
+subtests), including Clinical Support, PDF, Grad-CAM, original-image, and XAI
+endpoint coverage. A synthetic QA report was rendered locally as a 3-page PDF
+and visually inspected. The PDF endpoint was exercised directly with a
+database stub and temporary saved-image fixture; a full live HTTP + local
+pgvector retrieval run was not available in the final verification.
 
 ## Regression
 
-Existing functionality must continue to work:
+The full backend suite covers the existing functionality:
 
 ```text
 patient creation
@@ -1056,25 +988,20 @@ display.
 
 ---
 
-# 25. Visual Validation
+# 25. Phase 3C Research Validation Findings
 
-Grad-CAM is not complete merely because the API returns an image.
+Visual validation was performed across several representative X-rays and
+candidate target layers `blocks[5].norm1`, `blocks[8].norm1`,
+`blocks[10].norm1`, and `blocks[11].norm1`. It compared the original
+preprocessed image, full attribution, content-region attribution, and
+letterbox/padding attribution. Padding received inconsistent and sometimes
+disproportionate attribution; a padding sensitivity experiment changed the
+prediction for at least one sample. The full attribution remains visible for
+research inspection rather than silently masking the padding.
 
-Generate and inspect several representative X-rays.
-
-Verify:
-
-```text
-heatmap is not blank
-heatmap is not uniformly active
-overlay aligns with X-ray
-dimensions are correct
-selected class is correct
-no obvious token reshape distortion
-no severe artifacts
-```
-
-Keep visual validation evidence with the implementation notes.
+This is a research validation finding, not clinical validation. The current
+Grad-CAM visualization is unsuitable to present as confirmed anatomical
+disease localization.
 
 ---
 
@@ -1100,130 +1027,40 @@ Do not:
 
 ---
 
-# 27. Phase 3 Implementation Order
+# 27. Phase 3 Implementation Record
 
 ```text
-Phase 3A
-Runtime DINOv2 verification
+Phase 3A — Runtime DINOv2 verification (verified)
         ↓
-Phase 3B
-One-image Grad-CAM prototype
+Phase 3B — One-image Grad-CAM prototype (implemented)
         ↓
-Phase 3C
-Visual Grad-CAM validation
+Phase 3C — Research visual validation (completed; padding limitation found)
         ↓
-Phase 3D
-Original X-ray endpoint
+Phase 3D — Original X-ray endpoint (implemented and verified)
         ↓
-Phase 3E
-Original X-ray in Analysis Result
+Phase 3E — Original X-ray in Analysis Result (implemented)
         ↓
-Phase 3F
-XAI API (temporarily deferred pending further attribution validation)
+Phase 3F — On-demand XAI API (implemented; research-only)
         ↓
-Phase 3G
-Analysis Result XAI UI (deferred)
+Phase 3G — Analysis Result XAI UI (implemented; experimental/research-only)
         ↓
-Phase 3H
-Clinical Support XAI UI (deferred)
+Phase 3H — Clinical Support XAI (intentionally excluded)
         ↓
-Phase 3I
-PDF service (implemented on demand)
+Phase 3I — PDF service (implemented on demand)
         ↓
-Phase 3J
-PDF download UI (implemented; current response is posted)
+Phase 3J — PDF download UI (implemented; posts the current response)
         ↓
-Phase 3K
-Full regression
+Phase 3K — Regression verification (completed)
 ```
 
 ---
 
-# 28. Agent Operating Rules
+# 28. Current Phase 3 Completion Status
 
-Before each implementation phase:
-
-1. Inspect relevant existing code.
-2. Make the smallest change necessary.
-3. Reuse existing conventions.
-4. Run targeted tests.
-5. Report changed files.
-6. Report verification results.
-7. Stop if a required assumption fails.
-
-Do not move to the next phase after a failed verification.
-
----
-
-# 29. Git Workflow
-
-Use:
-
-```text
-feature/rag-llm
-```
-
-Do not modify:
-
-```text
-main
-```
-
-After each completed logical feature:
-
-```bash
-git status
-git add <specific files>
-git commit -m "<simple one-line message>"
-git push origin feature/rag-llm
-```
-
-Preferred commit messages:
-
-```text
-add xray image endpoint
-add grad cam prototype
-add xai endpoint
-update analysis result xai
-update clinical support xai
-add clinical support pdf
-add pdf download
-```
-
-Do not add emojis, prefixes, or unrelated commit information.
-
----
-
-# 30. Definition of Done
-
-```text
-[x] Runtime DINOv2 structure verified
-[x] Exact Grad-CAM target verified
-[x] Exact token reshape verified
-[x] Grad-CAM prototype works (research only; not approved for user-facing use)
-[ ] Grad-CAM visually validated
-[x] Original X-ray endpoint works
-[x] Original X-ray shown in Analysis Result
-[x] Original X-ray shown in Clinical Support
-[ ] Grad-CAM shown in Analysis Result
-[ ] X-ray and Grad-CAM shown in Clinical Support
-[x] Clinical Support grounding rules preserved
-[x] T/Z remain clearly model estimates
-[x] PDF generation works on demand in memory
-[x] PDF contains original X-ray
-[x] PDF excludes Grad-CAM while XAI is deferred
-[x] PDF contains predictions/probabilities
-[x] PDF contains model-estimated T/Z estimates and ranges
-[x] PDF contains clinical context
-[x] PDF contains the currently displayed Clinical Support
-[x] PDF contains retrieved sources
-[x] PDF contains grounding note
-[x] PDF contains disclaimer
-[x] Frontend build passes
-[x] Frontend lint passes
-[x] Focused Clinical Support and PDF backend tests pass (22 tests)
-[x] Generated PDF rendered and inspected locally
-[ ] Regression tests pass
-[ ] Git working tree clean
-[ ] Changes pushed to feature/rag-llm
-```
+- Runtime DINOv2 structure, target layer, activation, token count, and reshape verified.
+- Grad-CAM prototype, XAI endpoint, and Analysis Result visualization implemented; all remain experimental/research-only and not clinically validated.
+- Original X-ray endpoint and display on Analysis Result and Clinical Support implemented.
+- Clinical Support grounding correction/refinement implemented; T/Z estimates remain separate from the DINOv2 prediction and retain measurement safeguards.
+- Clinical Support PDF generation and download implemented and verified; the original X-ray and currently displayed response are included, and Grad-CAM is excluded.
+- Full backend suite: 44 tests and 61 subtests passed. Frontend build and lint passed in prior Phase 3 verification.
+- Clinical Support XAI and PDF Grad-CAM are intentionally excluded, not unfinished implementation tasks.
