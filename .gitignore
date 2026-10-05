@@ -85,4 +85,6 @@ Thumbs.db
 *.temp
 .cache/
 
+# Research paper - keep local
+research paper/
 
