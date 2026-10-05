@@ -1,10 +1,10 @@
 # Knee Osteoporosis AI
 
-AI-assisted osteoporosis screening using knee X-ray images and structured patient clinical information, with optional evidence-grounded Clinical Support.
+AI-assisted osteoporosis screening using knee X-ray images and structured patient clinical information, with on-demand evidence-grounded Clinical Support through OpenRouter.
 
 ## Overview
 
-Knee Osteoporosis AI is a local-first web application with two connected workflows:
+Knee Osteoporosis AI is a local-first web application with a screening workflow and an optional Clinical Support workflow. This README describes the `feature/rag-llm` branch. The separate Ollama experiment is paused and is not part of this branch's product scope.
 
 ### V1 Screening
 
@@ -26,7 +26,7 @@ Save analysis + image reference
 Analysis Result
 ```
 
-### Phase 2 Clinical Support
+### Clinical Support (Phase 2)
 
 ```text
 Saved analysis
@@ -47,6 +47,12 @@ Clinical Support UI
 ```
 
 Clinical Support is generated on demand and is not stored as a report.
+
+### X-ray, explainability, and PDF (Phase 3)
+
+- The saved original X-ray is available on the Analysis Result and Clinical Support pages through a per-analysis API endpoint.
+- Analysis Result can request an experimental Grad-CAM overlay. It is a research visualization, not confirmed anatomical disease localization, and is not used as evidence in Clinical Support.
+- Clinical Support can be downloaded as an in-memory PDF containing the saved X-ray and the response currently displayed. The PDF is streamed and not archived by the application; it excludes Grad-CAM.
 
 > **Medical safety:** This is an AI-assisted screening/support application. It does not replace DXA/QUS measurement, professional diagnosis, clinical judgement, or treatment decisions.
 
@@ -382,6 +388,9 @@ GET    /api/analyses/{analysis_id}
 DELETE /api/analyses/{analysis_id}
 
 POST   /api/analyses/{analysis_id}/clinical-support
+GET    /api/analyses/{analysis_id}/image
+GET    /api/analyses/{analysis_id}/xai
+POST   /api/analyses/{analysis_id}/clinical-support/pdf
 ```
 
 ---
@@ -568,14 +577,15 @@ npm run lint
 
 ## Current Verification Status
 
-The latest project verification reported:
+Previously recorded project verification (not re-run as part of this documentation review):
 
 ```text
 V1 regression                  PASS
 Clinical Support real flow    PASS
 RAG verification               PASS
 Security/privacy               PASS
-Parser tests                   5/5 PASS
+Backend suite                  44 passed, 61 subtests passed
+Clinical Support grounding     PASS (focused tests)
 Frontend build                 PASS
 Frontend lint                  PASS with existing warnings
 Git diff check                  PASS
@@ -590,19 +600,23 @@ No RAG PDFs tracked by Git
 No sensitive patient/file values sent to OpenRouter
 ```
 
-These are software verification results, not evidence of clinical validation.
+These are historical software verification results, not a fresh verification of this checkout and not evidence of clinical validation. The PRD contains the detailed recorded verification summary.
 
 ---
 
 ## Known Limitations
 
 - The current retrieval runtime uses direct SQLAlchemy + pgvector rather than LlamaIndex execution.
-- XAI/Grad-CAM is not implemented.
+- Grad-CAM is experimental and has documented padding-attribution limitations; it is not clinical evidence.
 - No validated probability-level multimodal fusion classifier is implemented.
 - T-score/Z-score outputs are model estimates.
 - `openrouter/free` may route to different upstream models and response formats.
 - Existing frontend lint warnings remain.
 - The application is intended for local research/development use rather than production clinical deployment.
+
+## Completion status
+
+The core workflows documented for this branch are implemented: V1 screening, RAG-based OpenRouter Clinical Support, original X-ray viewing, experimental Grad-CAM, and on-demand PDF download. The paused Ollama experiment is outside this branch's scope. “Complete” refers to this defined software scope; it does not mean the system has clinical validation, production deployment controls, or the future research extensions listed in [PRD.md](PRD.md).
 
 ---
 

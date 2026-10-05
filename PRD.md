@@ -11,6 +11,8 @@
 
 > This document is the single authoritative project PRD. It consolidates the original V1 PRD, the Phase 2 RAG/LLM specification, the Phase 3 X-ray/XAI/PDF implementation, and the verified implementation in the current feature branch. Where the original specifications and implementation differ, this document records the as-built behavior.
 
+> Branch scope: this PRD describes `feature/rag-llm`. The separate Ollama experiment is paused and is not included in this product scope.
+
 ---
 
 ## 1. Executive Summary
@@ -1254,7 +1256,7 @@ is committed to Git.
 
 ## 30. Verified Final State
 
-The latest recorded project verification reported:
+The previously recorded project verification reported the following. These results are historical and were not re-run during this documentation review:
 
 ```text
 V1 regression                  PASS
