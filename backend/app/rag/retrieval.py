@@ -11,7 +11,6 @@ from app.rag.embeddings import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
-
 class RetrievalService:
     def __init__(self):
         self.top_k = settings.RAG_TOP_K
@@ -73,7 +72,6 @@ class RetrievalService:
         except Exception as e:
             logger.error(f"Failed to retrieve chunks with pgvector: {str(e)}")
             raise
-
 
 # Global retrieval service instance
 retrieval_service = None
