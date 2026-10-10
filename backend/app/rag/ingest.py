@@ -213,6 +213,7 @@ def ingest_all_documents():
         db.close()
 
 
+
 if __name__ == "__main__":
     import sys
     import io
