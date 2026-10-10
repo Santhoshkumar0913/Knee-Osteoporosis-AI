@@ -4,7 +4,6 @@ from sqlalchemy.sql import func
 from pgvector.sqlalchemy import Vector
 from app.db.database import Base
 
-
 class RAGDocument(Base):
     """RAG document registry for idempotent ingestion"""
     __tablename__ = "rag_documents"
