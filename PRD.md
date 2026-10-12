@@ -5,13 +5,10 @@
 **Full project title:** Adaptive Multimodal AI and LLM Framework for Early Osteoporosis Screening and Evidence-Based Clinical Decision Support using Knee X-ray Images  
 **Product:** Knee Osteoporosis AI  
 **Repository:** `Santhoshkumar0913/Knee-Osteoporosis-AI`  
-**Current development branch:** `feature/rag-llm`  
 **Document type:** Unified V1 + Phase 2 + Phase 3 as-built Product Requirements Document<br>
 **Status:** Current implementation specification
 
-> This document is the single authoritative project PRD. It consolidates the original V1 PRD, the Phase 2 RAG/LLM specification, the Phase 3 X-ray/XAI/PDF implementation, and the verified implementation in the current feature branch. Where the original specifications and implementation differ, this document records the as-built behavior.
-
-> Branch scope: this PRD describes `feature/rag-llm`. The separate Ollama experiment is paused and is not included in this product scope.
+> This document is the project PRD. It consolidates the original V1 PRD, the Phase 2 RAG/LLM specification, the Phase 3 X-ray/XAI/PDF implementation, and the current implementation in this repository. Where the original specifications and implementation differ, this document records the as-built behavior.
 
 ---
 

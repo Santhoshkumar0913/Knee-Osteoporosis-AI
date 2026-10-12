@@ -4,7 +4,7 @@ AI-assisted osteoporosis screening using knee X-ray images and structured patien
 
 ## Overview
 
-Knee Osteoporosis AI is a local-first web application with a screening workflow and an optional Clinical Support workflow. This README describes the `feature/rag-llm` branch. The separate Ollama experiment is paused and is not part of this branch's product scope.
+Knee Osteoporosis AI is a local-first web application with an osteoporosis screening workflow and an optional Clinical Support workflow. This README describes the current implementation in this repository.
 
 ### V1 Screening
 
@@ -616,7 +616,7 @@ These are historical software verification results, not a fresh verification of 
 
 ## Completion status
 
-The core workflows documented for this branch are implemented: V1 screening, RAG-based OpenRouter Clinical Support, original X-ray viewing, experimental Grad-CAM, and on-demand PDF download. The paused Ollama experiment is outside this branch's scope. “Complete” refers to this defined software scope; it does not mean the system has clinical validation, production deployment controls, or the future research extensions listed in [PRD.md](PRD.md).
+The core workflows documented here are implemented: V1 screening, RAG-based OpenRouter Clinical Support, original X-ray viewing, experimental Grad-CAM, and on-demand PDF download. “Complete” refers to this defined software scope; it does not mean the system has clinical validation, production deployment controls, or the future research extensions listed in [PRD.md](PRD.md).
 
 ---
 
