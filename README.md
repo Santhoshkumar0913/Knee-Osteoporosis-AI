@@ -1,308 +1,184 @@
 # Knee Osteoporosis AI
 
-AI-assisted osteoporosis screening using knee X-ray images and structured patient clinical information, with on-demand evidence-grounded Clinical Support through OpenRouter.
+An AI-assisted osteoporosis screening and clinical decision-support application. It analyzes knee X-rays, combines the predicted image class with patient clinical information for T-score and Z-score estimates, and can retrieve guidance from osteoporosis reference documents to generate Clinical Support through OpenRouter.
 
-## Overview
+This is a completed local research and development prototype. It is not clinically validated or intended for production use.
 
-Knee Osteoporosis AI is a local-first web application with an osteoporosis screening workflow and an optional Clinical Support workflow. This README describes the current implementation in this repository.
+## What the application does
 
-### V1 Screening
+- Manages patient records and analysis history.
+- Classifies an uploaded knee X-ray as **Normal**, **Osteopenia**, or **Osteoporosis** using a fine-tuned DINOv2 ViT-S/14 model.
+- Displays the predicted class and class probabilities.
+- Estimates T-score with a Random Forest Regressor and Z-score with a Gradient Boosting Regressor.
+- Retrieves relevant passages from osteoporosis references with BGE embeddings and PostgreSQL/pgvector when Clinical Support is requested.
+- Sends permitted analysis context and retrieved evidence to an LLM through OpenRouter to produce structured Clinical Support.
+- Provides an on-demand, experimental Grad-CAM visualization and an on-demand PDF report.
 
-```text
-Patient
-  ↓
-Knee X-ray + clinical inputs
-  ↓
-DINOv2 classification
-  ↓
-Normal / Osteopenia / Osteoporosis
-  ↓
-T-score Random Forest
-  ↓
-Z-score Gradient Boosting
-  ↓
-Save analysis + image reference
-  ↓
-Analysis Result
-```
+The image classifier and clinical regressors are separate models used in sequence. The predicted image class is one feature passed to the regressors; this is not a jointly trained image-and-clinical-data fusion classifier.
 
-### Clinical Support (Phase 2)
+## Workflow
 
 ```text
-Saved analysis
-  ↓
-Automatic clinical evidence query
-  ↓
-BGE embedding
-  ↓
-PostgreSQL + pgvector
-  ↓
-3–5 relevant evidence chunks
-  ↓
-Grounded OpenRouter prompt
-  ↓
-Structured Clinical Support
-  ↓
-Clinical Support UI
+Patient record + knee X-ray + clinical inputs
+                  ↓
+       DINOv2 image classification
+                  ↓
+   Predicted class + class probabilities
+                  ↓
+Predicted class + fixed clinical feature vector
+          ↙                     ↘
+ Random Forest                 Gradient Boosting
+ T-score estimate              Z-score estimate
+          ↘                     ↙
+             Saved analysis
+                  ↓ (when requested)
+Analysis context → BGE query embedding → PostgreSQL/pgvector retrieval
+                  ↓
+ Retrieved passages + permitted context → OpenRouter LLM
+                  ↓
+      Structured Clinical Support with sources
 ```
 
-Clinical Support is generated on demand and is not stored as a report.
+## Machine learning models
 
-### X-ray, explainability, and PDF (Phase 3)
+### Knee X-ray classification
 
-- The saved original X-ray is available on the Analysis Result and Clinical Support pages through a per-analysis API endpoint.
-- Analysis Result can request an experimental Grad-CAM overlay. It is a research visualization, not confirmed anatomical disease localization, and is not used as evidence in Clinical Support.
-- Clinical Support can be downloaded as an in-memory PDF containing the saved X-ray and the response currently displayed. The PDF is streamed and not archived by the application; it excludes Grad-CAM.
+- **Architecture:** Fine-tuned DINOv2 ViT-S/14 (`vit_small_patch14_dinov2`).
+- **Input processing:** RGB conversion, aspect-ratio-preserving resize and padding to 518 × 518, then ImageNet normalization.
+- **Classes:** Normal, Osteopenia, Osteoporosis.
+- **Output:** Predicted class, class probabilities, and confidence for the selected class.
 
-> **Medical safety:** This is an AI-assisted screening/support application. It does not replace DXA/QUS measurement, professional diagnosis, clinical judgement, or treatment decisions.
+### Clinical score estimates
 
----
-
-## Technology Stack
-
-### Frontend
-
-- React
-- TypeScript
-- Vite
-- React Router
-- Axios
-- CSS
-- Oxlint
-
-### Backend
-
-- Python
-- FastAPI
-- Uvicorn
-- Pydantic
-- pydantic-settings
-- SQLAlchemy
-- PyTorch
-- timm
-- torchvision
-- scikit-learn
-- joblib
-- Pillow
-- Sentence Transformers
-- pypdf
-- pgvector
-- httpx
-
-### Database / Infrastructure
-
-- PostgreSQL 15-compatible pgvector image
-- pgAdmin
-- Docker
-- Docker Compose
-
-### ML / RAG
-
-- DINOv2 ViT-Small/14
-- Random Forest for T-score estimation
-- Gradient Boosting for Z-score estimation
-- `BAAI/bge-base-en-v1.5` embeddings
-- PostgreSQL/pgvector similarity search
-- OpenRouter REST API with configurable `openrouter/free` initial model selector
-
-> **As-built RAG note:** LlamaIndex dependencies are present from the Phase 2 specification, but the current verified runtime retrieval path uses direct SQLAlchemy + PostgreSQL/pgvector similarity search.
-
----
-
-## Application Routes
+The application constructs this fixed feature vector for both regressors:
 
 ```text
-/                                      Home
-/patients                              Patients
-/patients/:patientId                   Patient Details
-/patients/:patientId/analysis/new     New Analysis
-/analyses/:analysisId                  Analysis Result
-/analyses/:analysisId/clinical-support Clinical Support
+[Age, Gender, BMI, Weight, Height,
+ Joint Pain, Number of Pregnancies, Predicted Class, Pregnancy_Missing]
 ```
 
----
+- **Random Forest Regressor:** estimates T-score.
+- **Gradient Boosting Regressor:** estimates Z-score.
+- Menopausal status, smoking, alcohol use, previous fracture, and long-term steroid use are saved as additional context for Clinical Support; they are not inputs to these regressors.
+
+The displayed score values and error-margin ranges are model estimates. They are not measured DXA/QUS results or clinical confidence intervals.
+
+Model weights are not included in the repository. Place the required files in `backend/models/`:
+
+```text
+dinov2_experiment2_best.pth
+t_score_random_forest.joblib
+z_score_gradient_boosting.joblib
+model_metadata.json
+```
+
+The application loads these trained models for inference; it does not train them at runtime.
+
+## RAG and Clinical Support
+
+When a user requests Clinical Support for a saved analysis, the backend builds a query from the analysis context, embeds it with the local `BAAI/bge-base-en-v1.5` model, and searches stored document embeddings in PostgreSQL with pgvector cosine similarity. The default retrieval limit is five passages. The retrieved passages and permitted clinical context are sent to the configured LLM through the OpenRouter chat completions API.
+
+The LLM generates structured educational support, such as an explanation, items to discuss with a doctor, follow-up considerations, and treatment-related information. It does not classify the X-ray or calculate the score estimates. Retrieved source metadata is shown with the response. Clinical Support is generated on demand and is not stored as a permanent analysis record.
+
+### Approved reference documents
+
+The intended approved source set consists of these four PDFs:
+
+- `WHO_Fragility_Fractures.pdf` — WHO fragility-fracture information.
+- `ISBMR_Osteoporosis_Adults.pdf` — ISBMR position statement on adult osteoporosis diagnosis and treatment.
+- `IMS_Postmenopausal_Osteoporosis.pdf` — Indian Menopause Society guidance on postmenopausal osteoporosis.
+- `BHOF_Clinicians_Guide.pdf` — BHOF clinician guidance on osteoporosis prevention and treatment.
+
+Keep the reference PDFs locally in `rag_documents/`; they are not application code. **The current ingestion script processes every `*.pdf` in that directory.** To keep the indexed corpus limited to the approved set, make sure only these four PDFs are present there before running ingestion. The script has source metadata for these four documents; other PDFs may be ingested without that approved metadata.
+
+Ingestion extracts PDF text with pypdf, chunks it using the configured character size and overlap, generates BGE embeddings, and stores the document and chunk metadata in PostgreSQL/pgvector. Unchanged documents are skipped using checksums.
+
+Default settings:
+
+```text
+RAG_TOP_K=5
+CHUNK_SIZE=512 characters
+CHUNK_OVERLAP=50 characters
+EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
+```
+
+The runtime retrieval implementation uses SQLAlchemy and direct PostgreSQL/pgvector similarity search. LlamaIndex packages may be present in the dependency list, but are not used by the current retrieval path.
+
+## Explainability and PDF reports
+
+- **Grad-CAM:** Generated on demand for a saved X-ray. It is experimental, intended for research/explainability, and is not confirmed anatomical disease localization or evidence for Clinical Support. It is excluded from the PDF report.
+- **PDF report:** Generated in memory and streamed for download. It contains saved analysis information, the original X-ray, and the Clinical Support response currently displayed in the interface. The application does not archive the generated PDF.
+
+## Technology
+
+| Area | Technologies |
+|---|---|
+| Frontend | React, TypeScript, Vite, React Router, Axios, CSS, Oxlint |
+| Backend API | Python, FastAPI, Uvicorn, Pydantic, SQLAlchemy |
+| Machine learning | PyTorch, timm, torchvision, scikit-learn, joblib |
+| RAG and documents | Sentence Transformers, BGE, pypdf, PostgreSQL, pgvector |
+| LLM connection | OpenRouter REST API using httpx |
+| Local infrastructure | Docker Compose, PostgreSQL/pgvector, pgAdmin |
+
+Docker Compose runs PostgreSQL and pgAdmin. The frontend and backend are started separately for local development.
 
 ## Requirements
 
-Install:
+- Docker Desktop with Docker Compose
+- Python 3.13 or newer
+- Node.js and npm
+- The trained model files listed above
+- An OpenRouter API key for live LLM-generated Clinical Support
+- The four approved RAG PDFs for document ingestion
 
-- Docker Desktop
-- Python 3.13+
-- Node.js + npm
-- Git
+## Local setup
 
-The trained ML model files are required locally.
+### 1. Configure environment variables
 
----
+From the project root, copy `.env.example` to `.env` and set appropriate local credentials and the OpenRouter API key.
 
-## Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Santhoshkumar0913/Knee-Osteoporosis-AI.git
-cd Knee-Osteoporosis-AI
-```
-
-### 2. Create environment configuration
-
-Copy `.env.example` to `.env` and set the local values.
-
-```bash
-cp .env.example .env
-```
-
-On Windows PowerShell, use:
+PowerShell:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Do not commit `.env`.
+Do not commit `.env` or share its secrets.
 
----
-
-## PostgreSQL + pgAdmin
-
-Start the Docker services:
+### 2. Start PostgreSQL and pgAdmin
 
 ```bash
 docker compose up -d
 ```
 
-Current host ports:
+Default host addresses from `.env.example`:
 
-```text
-PostgreSQL: localhost:5433
-pgAdmin:    localhost:5050
-```
+- PostgreSQL: `localhost:5433`
+- pgAdmin: `http://localhost:5050`
 
-The PostgreSQL container uses a named volume:
+The database uses a named Docker volume (`postgres_data`) so data persists across container restarts. When connecting from pgAdmin inside Docker, use the PostgreSQL service name `postgres` and container port `5432`.
 
-```text
-postgres_data
-```
-
-Do not remove the volume during normal development.
-
-### pgAdmin
-
-Open:
-
-```text
-http://localhost:5050
-```
-
-Use the credentials configured in `.env`.
-
-For a database connection from pgAdmin to the Docker PostgreSQL service, use the Docker service/container hostname rather than `localhost` from inside the pgAdmin container.
-
----
-
-## ML Models
-
-The trained model files are intentionally excluded from Git and must be placed manually in:
-
-```text
-backend/models/
-```
-
-Required files:
-
-```text
-backend/models/
-├── dinov2_experiment2_best.pth
-├── t_score_random_forest.joblib
-├── z_score_gradient_boosting.joblib
-└── model_metadata.json
-```
-
-The project does not retrain these models during application runtime.
-
----
-
-## RAG Documents
-
-The four approved RAG PDFs are local-only and are intentionally excluded from Git.
-
-Create:
-
-```text
-rag_documents/
-├── WHO_Fragility_Fractures.pdf
-├── ISBMR_Osteoporosis_Adults.pdf
-├── IMS_Postmenopausal_Osteoporosis.pdf
-└── BHOF_Clinicians_Guide.pdf
-```
-
-Do not commit or push these PDFs.
-
----
-
-## Backend Setup
-
-Install backend dependencies:
+### 3. Install and start the backend
 
 ```bash
 cd backend
 python -m pip install -r requirements.txt
-```
-
-Start FastAPI:
-
-```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API:
+The API is available at `http://localhost:8000`; its health endpoint is `http://localhost:8000/api/health`.
 
-```text
-http://localhost:8000
-```
+### 4. Ingest RAG documents
 
-Health check:
-
-```text
-http://localhost:8000/api/health
-```
-
----
-
-## RAG Ingestion
-
-Run the manual ingestion command from the `backend` directory:
+Ensure the approved PDFs are present in `rag_documents/`, then run this from the `backend/` directory:
 
 ```bash
 python -m app.rag.ingest
 ```
 
-The pipeline is:
+### 5. Install and start the frontend
 
-```text
-PDF
-→ pypdf extraction
-→ chunking
-→ metadata/checksum
-→ BAAI/bge-base-en-v1.5
-→ PostgreSQL/pgvector
-```
-
-Current configuration defaults include:
-
-```text
-RAG_TOP_K=5
-CHUNK_SIZE=512
-CHUNK_OVERLAP=50
-EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
-```
-
-The ingestion process is designed to skip unchanged documents using checksums and existing chunks.
-
----
-
-## Frontend Setup
-
-Open a second terminal:
+In a separate terminal:
 
 ```bash
 cd frontend
@@ -310,322 +186,88 @@ npm install
 npm run dev
 ```
 
-Frontend:
+Open `http://localhost:5173`.
 
-```text
-http://localhost:5173
-```
+## Using the application
 
-### Frontend checks
+1. Open **Patients** and create a patient record or select an existing one.
+2. Start a new analysis, upload a supported knee X-ray, and enter the required clinical information.
+3. Submit the analysis and review the predicted class, class probabilities, and model-estimated scores.
+4. Optionally request the Grad-CAM visualization or open Clinical Support.
+5. Download a PDF report from the Clinical Support page when a response is displayed.
 
-Build:
+## Application routes
 
-```bash
-npm run build
-```
+| Route | Page |
+|---|---|
+| `/` | Home |
+| `/patients` | Patient list |
+| `/patients/:patientId` | Patient details and analysis history |
+| `/patients/:patientId/analysis/new` | New analysis |
+| `/analyses/:analysisId` | Analysis result |
+| `/analyses/:analysisId/clinical-support` | Clinical Support |
 
-Lint:
-
-```bash
-npm run lint
-```
-
-The repository currently has existing React hook lint warnings; these are non-blocking warnings from existing components.
-
----
-
-## End-to-End Usage
-
-### V1 analysis
-
-1. Open `http://localhost:5173`.
-2. Open Patients.
-3. Create a patient or select an existing patient.
-4. Open New Analysis.
-5. Upload a knee X-ray.
-6. Enter the required clinical fields.
-7. Enter the Phase 2 context fields when available.
-8. Check the automatically calculated BMI.
-9. Click **Run Analysis**.
-10. Review the Analysis Result page.
-
-### Clinical Support
-
-From a saved Analysis Result:
-
-```text
-View Clinical Support
-```
-
-The backend then:
-
-```text
-loads saved analysis
-→ builds query
-→ retrieves 3–5 evidence chunks
-→ calls OpenRouter
-→ parses response
-→ returns structured support
-```
-
-The Clinical Support page displays the prediction, clinical context, evidence-grounded explanation, action sections, sources, grounding note, and medical disclaimer.
-
----
-
-## API Endpoints
+## API endpoints
 
 ```text
 GET    /api/health
-
 POST   /api/patients
 GET    /api/patients
 GET    /api/patients/{patient_id}
 DELETE /api/patients/{patient_id}
-
 POST   /api/analyses
 GET    /api/analyses/patient/{patient_id}
 GET    /api/analyses/{analysis_id}
 DELETE /api/analyses/{analysis_id}
-
 POST   /api/analyses/{analysis_id}/clinical-support
 GET    /api/analyses/{analysis_id}/image
 GET    /api/analyses/{analysis_id}/xai
 POST   /api/analyses/{analysis_id}/clinical-support/pdf
 ```
 
----
+## Privacy and safety
 
-## ML Details
+- The OpenRouter request contains permitted clinical context and retrieved document passages. Patient name, patient ID, image bytes, image path, internal database IDs, filesystem paths, API keys, and database credentials are not included in the LLM context.
+- The knee X-ray is processed and stored by the local application; it is not sent to OpenRouter.
+- The PDF report contains patient-identifying details and should be handled accordingly.
+- The application has no authentication or production deployment controls and is intended for local research/development use.
+- This application is not clinically validated. Its outputs do not replace DXA/QUS testing, professional diagnosis, or clinical judgment, and must not be used as the sole basis for treatment decisions.
 
-### DINOv2
+## Development checks
 
-Current image model:
-
-```text
-DINOv2 ViT-Small/14
-Input: 518 × 518
-Feature dimension: 384
-Classes: 3
-```
-
-Class mapping:
-
-```text
-1 → Normal
-2 → Osteopenia
-3 → Osteoporosis
-```
-
-### Clinical feature vector
-
-The V1 clinical models use the fixed order:
-
-```text
-[Age, Gender, BMI, Weight, Height,
- Joint Pain, Number of Pregnancies, Class, Pregnancy_Missing]
-```
-
-Phase 2 fields are context/RAG fields only and do not alter this vector.
-
-### T/Z ranges
-
-Current empirical prediction-error margins:
-
-```text
-T-score: ±0.3715
-Z-score: ±1.2232
-```
-
-These are not clinical confidence intervals and are not measured DXA/QUS results.
-
----
-
-## RAG Source Set
-
-The current approved corpus is:
-
-```text
-WHO — 2024
-ISBMR — 2021
-Indian Menopause Society — 2020
-BHOF — 2022
-```
-
-The UI displays sources as:
-
-```text
-Organization — Year
-```
-
-Source metadata is stored internally with the document records, while the PDFs themselves remain local-only.
-
----
-
-## Privacy and Security
-
-Do not commit:
-
-```text
-.env
-rag_documents/
-patient images
-.pth model weights
-.joblib model weights
-```
-
-Never send the following to OpenRouter:
-
-```text
-Patient name
-Patient ID
-X-ray image
-X-ray path
-Filesystem paths
-Internal database IDs
-Database credentials
-API keys
-```
-
-The OpenRouter key is backend-only.
-
-The X-ray image is never sent to the external LLM provider.
-
----
-
-## Project Structure
-
-```text
-Knee-Osteoporosis-AI/
-├── backend/
-│   ├── app/
-│   │   ├── api/
-│   │   ├── core/
-│   │   ├── db/
-│   │   ├── rag/
-│   │   ├── schemas/
-│   │   └── services/
-│   ├── models/
-│   ├── tests/
-│   └── requirements.txt
-│
-├── frontend/
-│   ├── src/
-│   │   ├── pages/
-│   │   ├── services/
-│   │   └── types/
-│   ├── package.json
-│   └── vite.config.ts
-│
-├── storage/
-│   └── uploads/
-│
-│
-├── docker-compose.yml
-├── .env.example
-├── .gitignore
-├── PRD.md
-└── README.md
-```
-
----
-
-## Testing
-
-### V1 regression
-
-```text
-patient
-→ analysis
-→ DINOv2
-→ T-score/Z-score
-→ save
-→ history
-```
-
-### RAG
-
-Verify:
-
-- four PDFs are available locally;
-- ingestion completes;
-- metadata is present;
-- vectors are stored;
-- retrieval returns 3–5 chunks;
-- repeated ingestion of unchanged documents does not duplicate them.
-
-### Clinical Support
-
-Verify:
-
-- Analysis Result navigation works;
-- saved context is loaded server-side;
-- 3–5 chunks are retrieved;
-- OpenRouter returns content;
-- structured sections render;
-- sources are derived from retrieved metadata;
-- disclaimer is present;
-- retry/regenerate works.
-
-### Frontend
+From `frontend/`:
 
 ```bash
 npm run build
 npm run lint
 ```
 
----
+Backend tests are located in `backend/tests/` and can be run from `backend/` with the project's Python test environment.
 
-## Current Verification Status
-
-Previously recorded project verification (not re-run as part of this documentation review):
+## Project structure
 
 ```text
-V1 regression                  PASS
-Clinical Support real flow    PASS
-RAG verification               PASS
-Security/privacy               PASS
-Backend suite                  44 passed, 61 subtests passed
-Clinical Support grounding     PASS (focused tests)
-Frontend build                 PASS
-Frontend lint                  PASS with existing warnings
-Git diff check                  PASS
+Knee-Osteoporosis-AI/
+├── backend/
+│   ├── app/                 # API, database, ML, RAG, and report services
+│   ├── models/              # Locally supplied trained model files
+│   ├── tests/
+│   └── requirements.txt
+├── frontend/
+│   ├── src/                 # React application
+│   └── package.json
+├── rag_documents/           # Local RAG reference PDFs
+├── storage/uploads/         # Uploaded X-ray images
+├── docker-compose.yml
+├── .env.example
+└── README.md
 ```
 
-The verified environment also reported:
+## Completion and limitations
 
-```text
-5 retrieved chunks in the verified Clinical Support flow
-488 indexed RAG chunks
-No RAG PDFs tracked by Git
-No sensitive patient/file values sent to OpenRouter
-```
+The defined application scope is implemented: patient and analysis management, knee X-ray classification, clinical score estimates, RAG-based OpenRouter Clinical Support, original X-ray display, experimental Grad-CAM, and on-demand PDF reporting. Completion refers to these software workflows; it does not imply clinical validation, production readiness, or medical-device approval.
 
-These are historical software verification results, not a fresh verification of this checkout and not evidence of clinical validation. The PRD contains the detailed recorded verification summary.
-
----
-
-## Known Limitations
-
-- The current retrieval runtime uses direct SQLAlchemy + pgvector rather than LlamaIndex execution.
-- Grad-CAM is experimental and has documented padding-attribution limitations; it is not clinical evidence.
-- No validated probability-level multimodal fusion classifier is implemented.
-- T-score/Z-score outputs are model estimates.
-- `openrouter/free` may route to different upstream models and response formats.
-- Existing frontend lint warnings remain.
-- The application is intended for local research/development use rather than production clinical deployment.
-
-## Completion status
-
-The core workflows documented here are implemented: V1 screening, RAG-based OpenRouter Clinical Support, original X-ray viewing, experimental Grad-CAM, and on-demand PDF download. “Complete” refers to this defined software scope; it does not mean the system has clinical validation, production deployment controls, or the future research extensions listed in [PRD.md](PRD.md).
-
----
-
-## Documentation
-
-The root `PRD.md` is the authoritative project specification and describes the current as-built architecture and workflow.
-
-
----
+Known limitations include the experimental nature of Grad-CAM, the estimate-only nature of T-score and Z-score, the variable upstream model routing behind `openrouter/free`, and the need to keep the RAG PDF directory limited to the intended approved corpus before ingestion.
 
 ## License
 
