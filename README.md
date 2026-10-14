@@ -269,6 +269,4 @@ The defined application scope is implemented: patient and analysis management, k
 
 Known limitations include the experimental nature of Grad-CAM, the estimate-only nature of T-score and Z-score, the variable upstream model routing behind `openrouter/free`, and the need to keep the RAG PDF directory limited to the intended approved corpus before ingestion.
 
-## License
 
-This project is part of the Knee Osteoporosis AI research initiative.
