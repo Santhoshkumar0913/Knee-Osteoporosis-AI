@@ -268,5 +268,3 @@ Knee-Osteoporosis-AI/
 The defined application scope is implemented: patient and analysis management, knee X-ray classification, clinical score estimates, RAG-based OpenRouter Clinical Support, original X-ray display, experimental Grad-CAM, and on-demand PDF reporting. Completion refers to these software workflows; it does not imply clinical validation, production readiness, or medical-device approval.
 
 Known limitations include the experimental nature of Grad-CAM, the estimate-only nature of T-score and Z-score, the variable upstream model routing behind `openrouter/free`, and the need to keep the RAG PDF directory limited to the intended approved corpus before ingestion.
-
-
