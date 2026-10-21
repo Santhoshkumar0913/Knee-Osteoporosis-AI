@@ -126,7 +126,6 @@ const AnalysisResult = () => {
         <section className="result-card xai-card surface-card" aria-labelledby="xai-title">
           <div className="xai-card-heading">
             <h2 id="xai-title">Grad-CAM Visualization</h2>
-            <p className="research-only-label">Experimental · Research-only</p>
           </div>
           {xaiLoading ? (
             <p className="xai-status" role="status">Generating experimental Grad-CAM visualization...</p>
